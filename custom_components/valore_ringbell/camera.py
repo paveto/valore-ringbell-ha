@@ -41,7 +41,7 @@ class ValoreCamera(Camera):
         if video.frame is not None:
             return video.frame
         try:
-            video.acquire()
+            await video.async_acquire()
             try:
                 async with asyncio.timeout(FRAME_TIMEOUT):
                     _, frame = await video.wait_frame()

@@ -113,6 +113,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ValoreEntry) -> bool:
         )
 
     async def deliver(event):
+        video.prepare_for_ring()
         async_dispatcher_send(hass, ring_signal(entry), event)
 
     async def fetch(earliest):

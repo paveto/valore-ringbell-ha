@@ -17,6 +17,7 @@ from .transport import DeviceAnswerTimeout
 _LOGGER = logging.getLogger(__name__)
 
 COOLDOWN = 20
+RING_VIDEO_WINDOW = 60
 IDLE_TIMEOUT = 10
 START_TIMEOUT = 75
 FRAME_TIMEOUT = 15
@@ -47,6 +48,7 @@ class VideoSession:
         self.active_session = None
         self.task = None
         self.idle = None
+        self.ring_preview = None
         self.viewers = 0
         self.state = "idle"
         self.changed = asyncio.Event()
@@ -219,6 +221,43 @@ class VideoSession:
             self.task = asyncio.create_task(self.run())
         self.viewers += 1
 
+    async def async_acquire(self, *, wait=False):
+        """Join the stream, waiting briefly if a ring is preparing it."""
+        async with asyncio.timeout(COOLDOWN + CLOSE_TIMEOUT):
+            while True:
+                try:
+                    self.acquire()
+                    return
+                except web.HTTPServiceUnavailable:
+                    if self.shutdown or not (
+                        wait or (self.ring_preview is not None and not self.ring_preview.done())
+                    ):
+                        raise
+                    changed = self.changed
+                    delay = max(0.1, self.cooldown_until - time.monotonic()) if self.retry_in else COOLDOWN
+                    try:
+                        await asyncio.wait_for(changed.wait(), timeout=delay)
+                    except TimeoutError:
+                        continue
+
+    def prepare_for_ring(self):
+        """Open one short preview when a doorbell press is received."""
+        if not self.shutdown and (self.ring_preview is None or self.ring_preview.done()):
+            self.ring_preview = asyncio.create_task(self._prepare_for_ring())
+
+    async def _prepare_for_ring(self):
+        try:
+            async with asyncio.timeout(RING_VIDEO_WINDOW):
+                await self.async_acquire(wait=True)
+                try:
+                    await self.wait_frame()
+                    _LOGGER.debug("Valore video is ready for the caller")
+                    await asyncio.shield(self.task)
+                finally:
+                    self.release()
+        except (TimeoutError, web.HTTPServiceUnavailable):
+            _LOGGER.debug("Valore ring video window ended")
+
     def release(self):
         self.viewers -= 1
         if self.viewers == 0 and self.task is not None and not self.task.done() and not self.shutdown:
@@ -236,6 +275,10 @@ class VideoSession:
     async def stop(self, reason):
         if reason == "shutdown":
             self.shutdown = True
+            if self.ring_preview is not None:
+                self.ring_preview.cancel()
+                await asyncio.gather(self.ring_preview, return_exceptions=True)
+                self.ring_preview = None
             if self.idle is not None:
                 self.idle.cancel()
                 self.idle = None

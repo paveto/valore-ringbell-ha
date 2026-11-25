@@ -46,7 +46,10 @@ class LoopbackMedia:
 
     async def stream(self, request):
         """Write one MJPEG stream while this client is watching."""
-        self.video.acquire()
+        try:
+            await self.video.async_acquire()
+        except TimeoutError:
+            raise web.HTTPServiceUnavailable(text="Camera did not become available") from None
         response = web.StreamResponse(headers=HEADERS)
         try:
             try:

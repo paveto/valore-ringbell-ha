@@ -63,6 +63,9 @@ a do automatizace zadat název souboru. Pokud už máš pro tentýž zvonek
 jinou automatizaci s oznámením, vypni ji, aby iPhone nezazvonil dvakrát.
 
 Integrace kontroluje centrum zpráv Tuya každých 15 sekund při běžném provozu.
+Po zachycení stisku rovnou požádá o živý obraz a drží relaci připravenou
+maximálně minutu. Otevřený náhled na iPhonu nebo na webu může pokračovat
+i po této době. Automatické otevření probíhá i bez otevřené nástěnky.
 Při opakovaném výpadku nebo omezení požadavků interval prodlouží.
 Atribut `detection_delay_seconds` na entitě zazvonění ukazuje rozdíl mezi
 časem zprávy od Tuya a jejím zachycením v Home Assistantu.
