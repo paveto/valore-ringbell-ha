@@ -7,10 +7,35 @@ import json
 import logging
 import time
 
+import aiohttp
+
 POLL_INTERVAL = 20
 MAX_BACKOFF = 120
 EVENT_TTL = 180
 LOG = logging.getLogger(__name__)
+
+
+class RingResponseError(RuntimeError):
+    """An invalid alarm page with a safe diagnostic reason."""
+
+    def __init__(self, reason, code=""):
+        super().__init__(code)
+        self.reason = reason
+
+
+def failure_reason(error):
+    """Describe failures without logging responses, URLs or credentials."""
+    if isinstance(error, RingResponseError):
+        return error.reason
+    if isinstance(error, TimeoutError):
+        return "request timed out"
+    if isinstance(error, aiohttp.ClientResponseError):
+        return f"HTTP {error.status}"
+    if isinstance(error, aiohttp.ClientError):
+        return "network connection or response decoding failed"
+    if isinstance(error, RuntimeError):
+        return "mobile API rejected the request or returned an invalid envelope"
+    return type(error).__name__
 
 
 def ring_events(rows, device_id, earliest):
@@ -45,12 +70,14 @@ async def fetch_rings(mobile, device_id, earliest):
         {"json": json.dumps(query, separators=(",", ":"))},
         version="1.0",
     )
+    if not isinstance(response, dict):
+        raise RingResponseError("invalid response format")
     result = response.get("result")
     if not response.get("success"):
         code = str(response.get("errorCode") or response.get("code") or "")
-        raise RuntimeError(f"Tuya rejected alarm request: {code}")
+        raise RingResponseError("Tuya rejected the message request", code)
     if not isinstance(result, dict) or not isinstance(result.get("datas"), list):
-        raise RuntimeError("Tuya did not return an alarm page")
+        raise RingResponseError("message response is missing a valid alarm page")
     return ring_events(result["datas"], device_id, earliest)
 
 
@@ -59,6 +86,7 @@ async def watch_rings(fetch, deliver):
     pending = deque()
     known = {}
     delay = POLL_INTERVAL
+    last_failure = None
     LOG.info("Home Assistant: sledování stisku zvonku každých %s s.", POLL_INTERVAL)
     while True:
         cutoff = max(started, int(time.time()) - EVENT_TTL)
@@ -70,9 +98,15 @@ async def watch_rings(fetch, deliver):
                     known[identity] = event["timestamp"]
                     pending.append(event)
             delay = POLL_INTERVAL
+            if last_failure is not None:
+                LOG.info("Tuya doorbell message polling recovered")
+                last_failure = None
         except Exception as exc:
-            LOG.warning("Home Assistant: čtení zpráv Tuya selhalo (%s).", type(exc).__name__)
+            reason = failure_reason(exc)
             delay = min(delay * 2, MAX_BACKOFF)
+            if reason != last_failure:
+                LOG.warning("Tuya doorbell message polling failed: %s. Retry in %s s", reason, delay)
+                last_failure = reason
 
         while pending:
             event = pending[0]

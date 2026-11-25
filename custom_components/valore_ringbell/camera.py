@@ -1,6 +1,7 @@
 """Home Assistant camera entity and HomeKit Bridge video source."""
 
 import asyncio
+import logging
 
 from aiohttp import web
 from homeassistant.components.camera import Camera
@@ -8,6 +9,8 @@ from homeassistant.const import CONF_DEVICE_ID
 
 from . import device_info
 from .video import FRAME_TIMEOUT
+
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -26,6 +29,11 @@ class ValoreCamera(Camera):
         self.runtime = entry.runtime_data
         self._attr_device_info = device_info(entry)
         self._attr_unique_id = f"{entry.data[CONF_DEVICE_ID]}_camera"
+
+    async def async_added_to_hass(self):
+        """Log the entity ID after the camera has been registered."""
+        await super().async_added_to_hass()
+        _LOGGER.info("Valore camera registered as %s", self.entity_id)
 
     async def async_camera_image(self, width=None, height=None):
         """Use a recent live frame and bound waiting on a sleeping doorbell."""

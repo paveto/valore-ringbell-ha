@@ -2,6 +2,7 @@
 
 import asyncio
 from dataclasses import dataclass
+import logging
 import ssl
 
 import aiohttp
@@ -20,6 +21,8 @@ from .media import LoopbackMedia
 from .rings import watch_rings
 from .transport import enable_verified_mqtt
 from .video import VideoSession
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -85,6 +88,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ValoreEntry) -> bool:
     except BaseException:
         await entry.runtime_data.close()
         raise
+
+    if "camera" not in hass.config.components:
+        _LOGGER.error(
+            "The Home Assistant camera component failed to start. "
+            "Check the camera and stream errors in the system log"
+        )
 
     async def deliver(event):
         async_dispatcher_send(hass, ring_signal(entry), event)

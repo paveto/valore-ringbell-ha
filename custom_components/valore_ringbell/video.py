@@ -163,6 +163,14 @@ class VideoSession:
                     result["cleanup_error"] = type(exc).__name__
             self.history.appendleft(metrics | result)
             _LOGGER.debug("Video session metrics: %s", self.history[0])
+            if not metrics["frames"] and result["end"] not in {
+                "idle_timeout", "shutdown", "cancelled"
+            }:
+                _LOGGER.warning(
+                    "Valore video ended before the first frame after %s s: %s (%s)",
+                    metrics["duration_seconds"], result["end"],
+                    result.get("error_type", "no additional error"),
+                )
             self.session_started = None
             self.cooldown_until = time.monotonic() + COOLDOWN
         return result

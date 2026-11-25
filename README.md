@@ -25,6 +25,9 @@ jen správce. Tuya Smart je potřeba k prvotnímu spárování zařízení a ke 
 
 ## Karta na nástěnce
 
+V seznamu entit má kamera stejný název jako zařízení a ikonu videokamery.
+Otevřením této entity můžeš ověřit obraz přímo v Home Assistantu.
+
 Přidej kartu **Obrázek entity** a vyber kameru Valore. S tímto nastavením
 spustíš živý obraz kliknutím na kartu.
 
