@@ -184,7 +184,7 @@ class Speaker:
                 self._send_command(SPEAKER_CONTROL, pack("<II", 0, SPEAKER_STOP))
 
 
-async def talk_websocket(request, camera):
+async def talk_websocket(request, camera, *, max_seconds=MAX_PRESS_SECONDS):
     session = camera.active_session
     speaker = getattr(session, "speaker", None)
     if camera.state != "streaming" or not camera.viewers or speaker is None:
@@ -193,7 +193,7 @@ async def talk_websocket(request, camera):
     socket = web.WebSocketResponse(max_msg_size=1024)
     await socket.prepare(request)
     try:
-        async with asyncio.timeout(MAX_PRESS_SECONDS):
+        async with asyncio.timeout(max_seconds):
             codec, sample_rate = await speaker.begin(socket)
             await socket.send_json({"ready": True, "codec": codec, "sample_rate": sample_rate})
             pcm_bytes = sample_rate // 25

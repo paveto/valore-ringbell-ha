@@ -97,6 +97,12 @@ Záznamy zůstávají na úložišti Home Assistantu, dokud je nesmažeš.
 
 ## Apple Domácnost
 
+### HomeKit Bridge
+
+HomeKit Bridge nabízí obraz a předává stisk tlačítka. Apple Domácnost může
+příslušenství zobrazit v kategorii kamer. Mikrofon telefonu se touto cestou
+ke zvonku nepřenáší.
+
 Přidej vlastní instanci [HomeKit Bridge](https://www.home-assistant.io/integrations/homekit/)
 pro kameru v režimu `accessory`. Pro propojení zazvonění s kamerou použij
 v `configuration.yaml` nastavení `linked_doorbell_sensor`. Názvy entit nahraď
@@ -129,3 +135,23 @@ integrace požádá o probuzení, pokud zařízení přes Tuya hlásí spánek n
 napájení z baterie bez údaje `wireless_awake`. Při potížích porovnej
 chování po fyzickém zazvonění a po delší době nečinnosti. Ovládání obousměrného
 zvuku je k dispozici na kartě v Home Assistantu.
+
+### Zkušební připojení přes Scrypted na Home Assistant OS
+
+[Scrypted](https://docs.scrypted.app/homekit.html) může Valore vystavit jako
+příslušenství typu **Doorbell** s rozhraním **Intercom**. Propojení používá
+přístup k jedné vybrané kameře přes loopback na stejném Home Assistant OS.
+
+1. V `configuration.yaml` povol propojení pro svou kameru a restartuj Home Assistant.
+
+   ```yaml
+   valore_ringbell:
+     scrypted_camera: camera.valore
+   ```
+
+2. V Scrypted přidej nový skript a vlož obsah
+   [valore-doorbell.ts](scrypted/valore-doorbell.ts). Ulož a spusť ho.
+   V nastavení zařízení vyber typ **Doorbell**.
+3. Nainstaluj oficiální plugin HomeKit v Scrypted a pro toto zařízení ho povol.
+   Spáruj jeho samostatný QR kód v Apple Domácnosti. Ověř živý obraz,
+   poslech, mikrofon a upozornění při fyzickém zazvonění.
