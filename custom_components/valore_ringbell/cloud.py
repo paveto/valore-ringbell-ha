@@ -2,7 +2,11 @@
 
 import asyncio
 from dataclasses import dataclass
+import logging
+import time
 from urllib.parse import urlsplit
+
+import aiohttp
 
 from tuya_ipc_p2p_sdk.exceptions import TuyaIpcP2pError
 from tuya_ipc_p2p_sdk.models import StreamConfig
@@ -11,6 +15,11 @@ from tuya_mobile import TuyaMobileApp, get_mobile_app_profile
 from .mqtt import MobileClient, get_mqtt_identity
 from .rings import fetch_rings
 from .transport import ValoreSession
+
+_LOGGER = logging.getLogger(__name__)
+AWAKE_DP = "149"
+WAKE_INTERVAL = 45
+WAKE_API_TIMEOUT = 3
 
 
 @dataclass(frozen=True)
@@ -49,6 +58,7 @@ class Cloud:
         self.login = None
         self.selected = None
         self.refresh_lock = asyncio.Lock()
+        self.next_wake_check = 0.0
 
     async def authenticate(self):
         profile = get_mobile_app_profile(TuyaMobileApp.TUYA_SMART)
@@ -112,9 +122,31 @@ class Cloud:
             device, key = self.selected
             await self.rtc_config(self.mobile, device.id, key)
 
+    async def wake_if_asleep(self, mobile, device_id):
+        """Wake a device that reports the standard Tuya sleep datapoint."""
+        now = time.monotonic()
+        if now < self.next_wake_check:
+            return
+        self.next_wake_check = now + WAKE_INTERVAL
+        try:
+            async with asyncio.timeout(WAKE_API_TIMEOUT):
+                response = await mobile.get_device_status(device_id, gateway_id=device_id)
+            if not isinstance(response, dict):
+                return
+            result = response.get("result", response)
+            dps = result.get("dps") if isinstance(result, dict) else None
+            if not isinstance(dps, dict) or dps.get(AWAKE_DP) is not False:
+                return
+            async with asyncio.timeout(WAKE_API_TIMEOUT):
+                await mobile.publish_dps(device_id, {AWAKE_DP: True}, gateway_id=device_id)
+            _LOGGER.debug("Tuya accepted the on-demand wake request")
+        except (aiohttp.ClientError, TimeoutError, RuntimeError, ValueError) as exc:
+            _LOGGER.debug("Tuya wake status or request failed (%s)", type(exc).__name__)
+
     async def open_video(self, on_frame):
         device, key = self.selected
         mobile = self.mobile
+        await self.wake_if_asleep(mobile, device.id)
         try:
             config = await self.rtc_config(mobile, device.id, key)
         except RuntimeError as exc:

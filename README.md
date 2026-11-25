@@ -77,5 +77,8 @@ a vyzkoušej živý náhled i fyzické zazvonění. FFmpeg dostává obraz ze sm
 `127.0.0.1`, takže stačí síťové připojení potřebné k párování samotného HomeKitu.
 
 Verze 0.1 nabízí živý obraz a událost tlačítka. U spícího bateriového zvonku
-může náběh obrazu trvat déle než čeká Apple Domácnost. Obousměrný zvuk z původního
-panelu do této verze ještě přenesený není.
+může náběh obrazu trvat déle než čeká Apple Domácnost. Při otevření náhledu
+integrace požádá o probuzení, pokud zařízení přes Tuya hlásí spánek
+prostřednictvím standardního údaje `wireless_awake`. Při potížích porovnej
+chování po fyzickém zazvonění a po delší době nečinnosti. Obousměrný zvuk
+z původního panelu do této verze ještě přenesený není.

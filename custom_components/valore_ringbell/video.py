@@ -10,6 +10,7 @@ import time
 
 from aiohttp import web
 from PIL import Image
+from tuya_ipc_p2p_sdk.exceptions import TuyaIpcP2pDeviceBusyError
 
 from .transport import DeviceAnswerTimeout
 
@@ -146,6 +147,8 @@ class VideoSession:
             raise
         except DeviceAnswerTimeout:
             result = {"end": "no_device_answer"}
+        except TuyaIpcP2pDeviceBusyError:
+            result = {"end": "device_busy"}
         except TimeoutError:
             result = {"end": "setup_timeout"}
         except Exception as exc:
