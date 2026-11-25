@@ -1,0 +1,66 @@
+blueprint:
+  name: Valore Ringbell – zvonění a obraz na iPhonu
+  description: >
+    Po stisku zvonku přehraje zvuk oznámení, nabídne náhled a klepnutím otevře
+    kameru Valore v aplikaci Home Assistant.
+  domain: automation
+  homeassistant:
+    min_version: 2026.10.4
+  input:
+    ring_event:
+      name: Zazvonění
+      selector:
+        entity:
+          filter:
+            - domain: event
+              integration: valore_ringbell
+    camera_entity:
+      name: Kamera Valore
+      selector:
+        entity:
+          filter:
+            - domain: camera
+              integration: valore_ringbell
+    iphone:
+      name: iPhone
+      description: Vyber telefon registrovaný v aplikaci Home Assistant.
+      selector:
+        device:
+          filter:
+            - integration: mobile_app
+    sound:
+      name: Zvuk oznámení
+      description: Ponech systémový zvuk nebo zadej název zvuku naimportovaného v aplikaci.
+      default: default
+      selector:
+        text:
+
+mode: queued
+max: 5
+variables:
+  camera: !input camera_entity
+triggers:
+  - trigger: state
+    entity_id: !input ring_event
+    not_from:
+      - unavailable
+    not_to:
+      - unavailable
+      - unknown
+conditions:
+  - condition: template
+    value_template: >
+      {{ trigger is not defined or not trigger.platform or
+         (trigger.from_state is not none and trigger.to_state is not none and
+          trigger.to_state.attributes.get('event_type') == 'ring') }}
+actions:
+  - device_id: !input iphone
+    domain: mobile_app
+    type: notify
+    title: Valore
+    message: Někdo zvoní u dveří
+    data:
+      entity_id: "{{ camera }}"
+      url: "/?more-info-entity-id={{ camera }}"
+      push:
+        sound: !input sound

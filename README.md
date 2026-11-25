@@ -28,24 +28,40 @@ jen správce. Tuya Smart je potřeba k prvotnímu spárování zařízení a ke 
 V seznamu entit má kamera stejný název jako zařízení a ikonu videokamery.
 Otevřením této entity můžeš ověřit obraz přímo v Home Assistantu.
 
-Přidej kartu **Obrázek entity** a vyber kameru Valore. S tímto nastavením
-spustíš živý obraz kliknutím na kartu.
+### Webový zvonek
+
+Po instalaci verze 0.1.4 a restartu Home Assistantu načti webovou stránku znovu.
+Na nástěnce zvol **Upravit nástěnku → Přidat kartu → Ručně**. Vlož konfiguraci
+a nahraď obě ID skutečnými ID svých entit.
 
 ```yaml
-type: picture-entity
-entity: camera.valore
+type: custom:valore-doorbell-card
 name: U dveří
-show_state: false
-camera_view: auto
-tap_action:
-  action: more-info
+camera: camera.inteligentni_zvonek
+event_entity: event.inteligentni_zvonek_zazvoneni
 ```
+
+Na kartě klikni na **Zapnout zvuk**. Krátké dvojité zazvonění ověří hlasitost.
+Dokud je karta otevřená na nástěnce, nový stisk ji rozezní a otevře živý obraz
+nejvýše na 45 sekund. **Otevřít obraz** a **Zavřít obraz** fungují i ručně.
+Prohlížeč může vyžadovat nové povolení zvuku po zavření nebo obnovení stránky.
 
 ## Oznámení v Home Assistantu
 
-Vytvoř automatizaci s triggerem **Stav** na entitě `event.…` z Valore a akcí
-`notify.mobile_app_…` svého iPhonu. Při volbě triggeru ponech pole **Z** a **Na**
-prázdná. V nastavení automatizace lze omezit oznámení například na konkrétní čas.
+### iPhone
+
+1. [Importuj šablonu Valore Ringbell](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fpaveto%2Fvalore-ringbell-ha%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fvalore_ringbell_iphone.yaml)
+   a vytvoř z ní automatizaci.
+2. Vyber **Zazvonění**, kameru **Inteligentní zvonek** a svůj **iPhone**
+   registrovaný v aplikaci Home Assistant. Ulož automatizaci.
+3. Po stisku iPhone přehraje zvuk oznámení. Klepnutím otevřeš kameru.
+   Podržením oznámení můžeš zobrazit náhled včetně živého MJPEG, pokud je zvonek dostupný.
+
+Zvuk je ve výchozím nastavení stejný jako běžné oznámení Home Assistantu.
+Pokud máš vlastní zvuk, můžeš ho [importovat do Companion App](https://companion.home-assistant.io/docs/notifications/notification-sounds/#custom-push-notification-sounds)
+a do automatizace zadat název souboru. Pokud už máš pro tentýž zvonek
+jinou automatizaci s oznámením, vypni ji, aby iPhone nezazvonil dvakrát.
+
 Integrace kontroluje centrum zpráv Tuya každých 15 sekund při běžném provozu.
 Při opakovaném výpadku nebo omezení požadavků interval prodlouží.
 Atribut `detection_delay_seconds` na entitě zazvonění ukazuje rozdíl mezi
@@ -81,7 +97,7 @@ a vyzkoušej živý náhled i fyzické zazvonění. FFmpeg dostává obraz ze sm
 
 Verze 0.1 nabízí živý obraz a událost tlačítka. U spícího bateriového zvonku
 může náběh obrazu trvat déle než čeká Apple Domácnost. Při otevření náhledu
-integrace požádá o probuzení, pokud zařízení přes Tuya hlásí spánek
-prostřednictvím standardního údaje `wireless_awake`. Při potížích porovnej
+integrace požádá o probuzení, pokud zařízení přes Tuya hlásí spánek nebo
+napájení z baterie bez údaje `wireless_awake`. Při potížích porovnej
 chování po fyzickém zazvonění a po delší době nečinnosti. Obousměrný zvuk
 z původního panelu do této verze ještě přenesený není.

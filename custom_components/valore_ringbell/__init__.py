@@ -3,10 +3,12 @@
 import asyncio
 from dataclasses import dataclass
 import logging
+from pathlib import Path
 import ssl
 
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.const import CONF_DEVICE_ID, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
@@ -23,6 +25,21 @@ from .transport import enable_verified_mqtt
 from .video import VideoSession
 
 _LOGGER = logging.getLogger(__name__)
+CARD_URL = "/valore_ringbell/card.js"
+
+
+async def async_setup(hass, config):
+    """Make the dashboard card available without exposing any camera data."""
+    await hass.http.async_register_static_paths([
+        StaticPathConfig(
+            CARD_URL, str(Path(__file__).with_name("frontend") / "card.js"), cache_headers=False,
+        ),
+    ])
+    if "frontend" in hass.config.components:
+        from homeassistant.components.frontend import add_extra_js_url
+
+        add_extra_js_url(hass, CARD_URL)
+    return True
 
 
 @dataclass

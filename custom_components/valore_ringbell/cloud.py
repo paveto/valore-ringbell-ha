@@ -131,7 +131,7 @@ class Cloud:
             await self.rtc_config(self.mobile, device.id, key)
 
     async def wake_if_asleep(self, mobile, device_id):
-        """Wake a device that reports the standard Tuya sleep datapoint."""
+        """Request a wake-up for a sleeping or battery-powered doorbell."""
         now = time.monotonic()
         if now < self.next_wake_check:
             return
@@ -143,7 +143,12 @@ class Cloud:
                 return
             result = response.get("result", response)
             dps = result.get("dps") if isinstance(result, dict) else None
-            if not isinstance(dps, dict) or dps.get(AWAKE_DP) is not False:
+            if not isinstance(dps, dict):
+                return
+            awake = dps.get(AWAKE_DP)
+            # Battery-powered IP07/X6 units can omit the wake datapoint from status.
+            on_battery = ("145" in dps and dps.get("146") in (0, "0"))
+            if awake is not False and not (awake is None and on_battery):
                 return
             async with asyncio.timeout(WAKE_API_TIMEOUT):
                 await mobile.publish_dps(device_id, {AWAKE_DP: True}, gateway_id=device_id)
@@ -154,13 +159,13 @@ class Cloud:
     async def open_video(self, on_frame):
         device, key = self.selected
         mobile = self.mobile
-        await self.wake_if_asleep(mobile, device.id)
         try:
             config = await self.rtc_config(mobile, device.id, key)
         except RuntimeError as exc:
             if not await self.refresh_if_expired(mobile, exc):
                 raise
             config = await self.rtc_config(self.mobile, device.id, key)
+        await self.wake_if_asleep(self.mobile, device.id)
         return ValoreSession(config, get_mqtt_identity(self.mobile, self.login), self.login.uid, on_frame)
 
     async def rings(self, earliest):
