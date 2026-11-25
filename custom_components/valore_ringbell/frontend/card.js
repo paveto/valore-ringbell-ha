@@ -1,3 +1,6 @@
+import { DoorbellAudio } from "./audio.js";
+import { DoorbellTalk } from "./talk.js";
+
 class ValoreDoorbellCard extends HTMLElement {
   setConfig(config) {
     if (!/^event\.[a-z0-9_]+$/.test(config.event_entity ?? "") ||
@@ -17,6 +20,13 @@ class ValoreDoorbellCard extends HTMLElement {
   set hass(hass) {
     this.homeAssistant = hass;
     if (!this.config || !this.isConnected) return;
+    const target = new URL(window.location.href);
+    if (target.searchParams.get("valore_answer") === "1" &&
+        hass.states[this.config.camera]?.attributes.access_token) {
+      target.searchParams.delete("valore_answer");
+      history.replaceState(history.state, "", target);
+      this.openVideo();
+    }
     const state = hass.states[this.config.event_entity];
     if (!state) return;
     if (this.lastRing === undefined) {
@@ -29,17 +39,30 @@ class ValoreDoorbellCard extends HTMLElement {
     if (state.attributes.event_type !== "ring") return;
     this.lastRingLabel.textContent = "Zazvonění v " + new Date(state.state).toLocaleTimeString();
     this.playChime();
-    this.openVideo();
+    this.openVideo(true);
   }
 
   connectedCallback() {
     if (this.homeAssistant) this.hass = this.homeAssistant;
+    this.pageHidden ??= () => {
+      if (document.hidden) this.closeVideo();
+    };
+    this.pageClosed ??= () => this.closeVideo();
+    document.addEventListener("visibilitychange", this.pageHidden);
+    window.addEventListener("pagehide", this.pageClosed);
   }
 
   disconnectedCallback() {
+    document.removeEventListener("visibilitychange", this.pageHidden);
+    window.removeEventListener("pagehide", this.pageClosed);
     this.closeVideo();
     this.lastRing = undefined;
     if (this.audio) void this.audio.close().catch(() => {});
+    if (this.listener?.context) {
+      void this.listener.context.close().catch(() => {});
+      this.listener.context = null;
+      this.listener.gain = null;
+    }
     this.audio = undefined;
     this.syncSoundButton();
   }
@@ -78,6 +101,10 @@ class ValoreDoorbellCard extends HTMLElement {
         <div class="controls">
           <button type="button" class="sound" aria-pressed="false">Zapnout zvuk</button>
           <button type="button" class="video">Otevřít obraz</button>
+          <button type="button" class="listen" hidden>Poslouchat</button>
+          <button type="button" class="talk" hidden>Mluvit</button>
+          <button type="button" class="hangup" hidden>Položit</button>
+          <p class="status conversation" role="status" hidden></p>
         </div>
       </ha-card>`;
     root.querySelector("h2").textContent = this.config.name ?? "U dveří";
@@ -87,6 +114,18 @@ class ValoreDoorbellCard extends HTMLElement {
     this.image = root.querySelector("img");
     this.videoButton = root.querySelector(".video");
     this.soundButton = root.querySelector(".sound");
+    this.listenButton = root.querySelector(".listen");
+    this.talkButton = root.querySelector(".talk");
+    this.hangupButton = root.querySelector(".hangup");
+    this.conversationStatus = root.querySelector(".conversation");
+    const showAudio = (notice) => { this.conversationStatus.textContent = notice; };
+    const sign = (mode) => this.signedSocket(mode);
+    this.listener = new DoorbellAudio(showAudio, 0.7, sign);
+    this.talker = new DoorbellTalk(showAudio, (active) => {
+      this.talkButton.textContent = active ? "Přestat mluvit" : "Mluvit";
+      if (active && this.listener.gain) this.listener.setVolume(0);
+      else this.listener.setVolume(0.7);
+    }, sign);
     this.image.addEventListener("load", () => {
       if (!this.videoOpen) return;
       this.image.hidden = false;
@@ -96,37 +135,84 @@ class ValoreDoorbellCard extends HTMLElement {
       if (this.videoOpen) this.closeVideo("Živý obraz teď není dostupný.");
     });
     this.videoButton.addEventListener("click", () => {
-      if (this.videoOpen) this.closeVideo();
+      if (this.videoOpen && !this.passive) this.closeVideo();
       else this.openVideo();
     });
+    this.listenButton.addEventListener("click", () => {
+      if (this.listener.socket || this.listener.pending) {
+        this.listener.stop();
+        this.listenButton.textContent = "Poslouchat";
+      } else {
+        void this.listener.start();
+        this.listenButton.textContent = "Ztlumit poslech";
+      }
+    });
+    this.talkButton.addEventListener("click", () => {
+      if (this.talker.press) this.talker.stop();
+      else void this.talker.start();
+    });
+    this.hangupButton.addEventListener("click", () => void this.hangup());
     this.soundButton.addEventListener("click", () => void this.toggleSound());
     this.syncSoundButton();
   }
 
-  openVideo() {
+  async signedSocket(mode) {
+    const path = "/api/valore_ringbell/" + this.config.camera + "/" + mode;
+    const signed = await this.homeAssistant.callWS({type: "auth/sign_path", path, expires: 60});
+    const address = new URL(signed.path, window.location.origin);
+    address.protocol = address.protocol === "https:" ? "wss:" : "ws:";
+    return address;
+  }
+
+  async hangup() {
+    this.closeVideo();
+    try {
+      const response = await this.homeAssistant.fetchWithAuth(
+        "/api/valore_ringbell/" + this.config.camera + "/hangup", {method: "POST"}
+      );
+      if (!response.ok) throw new Error(response.status);
+    } catch {
+      this.message.textContent = "Náhled se zavřel. Odpojení zvonku se nepodařilo potvrdit.";
+    }
+  }
+
+  openVideo(passive = false) {
     clearTimeout(this.videoTimer);
-    if (!this.videoOpen) {
+    if (!this.videoOpen || (this.passive && !passive)) {
       const token = this.homeAssistant?.states[this.config.camera]?.attributes.access_token;
       if (typeof token !== "string" || !token) {
         this.closeVideo("Živý obraz teď není dostupný.");
         return;
       }
       this.videoOpen = true;
+      this.passive = passive;
       this.screen.classList.add("live");
       this.message.textContent = "Připojuji kameru…";
-      this.videoButton.textContent = "Zavřít obraz";
+      this.videoButton.textContent = passive ? "Přijmout" : "Zavřít obraz";
+      this.hangupButton.hidden = false;
+      this.listenButton.hidden = passive;
+      this.talkButton.hidden = passive;
+      this.conversationStatus.hidden = passive;
       this.image.referrerPolicy = "no-referrer";
       this.image.hidden = false;
       this.image.src = "/api/camera_proxy_stream/" + encodeURIComponent(this.config.camera)
-        + "?token=" + encodeURIComponent(token) + "&t=" + Date.now();
+        + "?token=" + encodeURIComponent(token) + (passive ? "&valore_preview=1" : "")
+        + "&t=" + Date.now();
     }
-    this.videoTimer = setTimeout(() => this.closeVideo(), 45_000);
+    if (this.passive) this.videoTimer = setTimeout(() => this.closeVideo(), 180_000);
   }
 
   closeVideo(message = "Živý obraz se otevře po zazvonění.") {
     clearTimeout(this.videoTimer);
     this.videoOpen = false;
     if (!this.image) return;
+    this.listener.stop();
+    this.talker.stop();
+    this.listenButton.hidden = true;
+    this.listenButton.textContent = "Poslouchat";
+    this.talkButton.hidden = true;
+    this.hangupButton.hidden = true;
+    this.conversationStatus.hidden = true;
     this.image.removeAttribute("src");
     this.image.hidden = true;
     this.message.textContent = message;

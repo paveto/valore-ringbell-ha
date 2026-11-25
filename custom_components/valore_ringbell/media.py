@@ -50,6 +50,9 @@ class LoopbackMedia:
             await self.video.async_acquire()
         except TimeoutError:
             raise web.HTTPServiceUnavailable(text="Camera did not become available") from None
+        interactive = request.query.get("valore_preview") != "1"
+        if interactive:
+            self.video.answer_ring()
         response = web.StreamResponse(headers=HEADERS)
         try:
             try:
@@ -69,4 +72,10 @@ class LoopbackMedia:
         except ConnectionError:
             return response
         finally:
+            if interactive:
+                self.video.interactive_viewers -= 1
             self.video.release()
+            if (interactive and not self.video.interactive_viewers and self.video.ring_answered is not None
+                    and self.video.ring_answered.is_set()):
+                self.video.ring_answered = None
+                await self.video.close_ring()

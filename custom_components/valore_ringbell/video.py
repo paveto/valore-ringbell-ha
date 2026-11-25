@@ -13,11 +13,12 @@ from PIL import Image
 from tuya_ipc_p2p_sdk.exceptions import TuyaIpcP2pDeviceBusyError
 
 from .transport import DeviceAnswerTimeout
+from .live_audio import LiveAudio
 
 _LOGGER = logging.getLogger(__name__)
 
 COOLDOWN = 20
-RING_VIDEO_WINDOW = 60
+RING_VIDEO_WINDOW = 180
 IDLE_TIMEOUT = 10
 START_TIMEOUT = 75
 FRAME_TIMEOUT = 15
@@ -46,9 +47,12 @@ class VideoSession:
     def __init__(self, open_session):
         self.open_session = open_session
         self.active_session = None
+        self.audio = LiveAudio()
         self.task = None
         self.idle = None
         self.ring_preview = None
+        self.ring_answered = None
+        self.interactive_viewers = 0
         self.viewers = 0
         self.state = "idle"
         self.changed = asyncio.Event()
@@ -195,6 +199,7 @@ class VideoSession:
                 self.set_state("backoff")
                 await asyncio.sleep(max(0, self.cooldown_until - time.monotonic()))
         finally:
+            self.audio.close()
             self.set_state("idle")
 
     @property
@@ -243,20 +248,54 @@ class VideoSession:
     def prepare_for_ring(self):
         """Open one short preview when a doorbell press is received."""
         if not self.shutdown and (self.ring_preview is None or self.ring_preview.done()):
-            self.ring_preview = asyncio.create_task(self._prepare_for_ring())
+            self.ring_answered = asyncio.Event()
+            if self.interactive_viewers:
+                self.ring_answered.set()
+            self.ring_preview = asyncio.create_task(self._prepare_for_ring(self.ring_answered))
 
-    async def _prepare_for_ring(self):
+    async def _prepare_for_ring(self, ring_answered):
         try:
             async with asyncio.timeout(RING_VIDEO_WINDOW):
                 await self.async_acquire(wait=True)
                 try:
                     await self.wait_frame()
                     _LOGGER.debug("Valore video is ready for the caller")
-                    await asyncio.shield(self.task)
+                    answered = asyncio.create_task(ring_answered.wait())
+                    try:
+                        await asyncio.wait((answered, self.task), return_when=asyncio.FIRST_COMPLETED)
+                    finally:
+                        answered.cancel()
                 finally:
                     self.release()
         except (TimeoutError, web.HTTPServiceUnavailable):
             _LOGGER.debug("Valore ring video window ended")
+            if not self.interactive_viewers:
+                await self.stop("unanswered")
+
+    def answer_ring(self):
+        self.interactive_viewers += 1
+        if self.ring_answered is not None:
+            self.ring_answered.set()
+
+    async def close_ring(self):
+        """Release the unanswered hold and disconnect the current relay."""
+        self.ring_answered = None
+        await self.cancel_ring_preview()
+        await self.stop("hangup")
+
+    async def cancel_ring_preview(self):
+        preview = self.ring_preview
+        if preview is not None:
+            preview.cancel()
+            await asyncio.gather(preview, return_exceptions=True)
+            if self.ring_preview is preview:
+                self.ring_preview = None
+
+    async def wait_ring_frame(self, after=-1):
+        """Allow the background preview to acquire video first."""
+        while self.state == "idle" and self.ring_preview is not None and not self.ring_preview.done():
+            await self.changed.wait()
+        return await self.wait_frame(after)
 
     def release(self):
         self.viewers -= 1
@@ -275,10 +314,7 @@ class VideoSession:
     async def stop(self, reason):
         if reason == "shutdown":
             self.shutdown = True
-            if self.ring_preview is not None:
-                self.ring_preview.cancel()
-                await asyncio.gather(self.ring_preview, return_exceptions=True)
-                self.ring_preview = None
+            await self.cancel_ring_preview()
             if self.idle is not None:
                 self.idle.cancel()
                 self.idle = None

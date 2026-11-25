@@ -8,6 +8,7 @@ import ssl
 
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.components.ffmpeg import get_ffmpeg_manager
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.const import CONF_DEVICE_ID, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant, callback
@@ -17,12 +18,15 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from tuya_mobile import TuyaMobileInvalidAuth
 
+from .archive import RingArchive
 from .cloud import Cloud, UnsupportedDevice
 from .const import CONF_COUNTRY_CODE, CONF_DEVICE_NAME, DOMAIN, PLATFORMS
 from .media import LoopbackMedia
+from .live_audio import LiveAudio
 from .rings import watch_rings
 from .transport import enable_verified_mqtt
 from .video import VideoSession
+from .views import DoorbellAudioView, DoorbellHangupView
 
 _LOGGER = logging.getLogger(__name__)
 CARD_URL = "/valore_ringbell/card.js"
@@ -32,9 +36,12 @@ async def async_setup(hass, config):
     """Make the dashboard card available without exposing any camera data."""
     await hass.http.async_register_static_paths([
         StaticPathConfig(
-            CARD_URL, str(Path(__file__).with_name("frontend") / "card.js"), cache_headers=False,
-        ),
+            f"/valore_ringbell/{name}", str(Path(__file__).with_name("frontend") / name),
+            cache_headers=False,
+        ) for name in ("card.js", "audio.js", "talk.js", "microphone.js")
     ])
+    hass.http.register_view(DoorbellAudioView())
+    hass.http.register_view(DoorbellHangupView())
     if "frontend" in hass.config.components:
         from homeassistant.components.frontend import add_extra_js_url
 
@@ -48,6 +55,8 @@ class Runtime:
 
     video: VideoSession
     media: LoopbackMedia
+    audio: LiveAudio
+    archive: RingArchive
     ring_task: asyncio.Task | None = None
 
     async def close(self):
@@ -56,6 +65,7 @@ class Runtime:
             self.ring_task.cancel()
             await asyncio.gather(self.ring_task, return_exceptions=True)
         await self.video.stop("shutdown")
+        await self.archive.close()
         await self.media.close()
 
 
@@ -99,7 +109,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ValoreEntry) -> bool:
     video = VideoSession(cloud.open_video)
     media = LoopbackMedia(video)
     await media.start()
-    entry.runtime_data = Runtime(video, media)
+    cloud.on_audio = video.audio.publish
+    archive = RingArchive(hass, video, get_ffmpeg_manager(hass).binary)
+    entry.runtime_data = Runtime(video, media, video.audio, archive)
     try:
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     except BaseException:
@@ -114,7 +126,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ValoreEntry) -> bool:
 
     async def deliver(event):
         video.prepare_for_ring()
-        async_dispatcher_send(hass, ring_signal(entry), event)
+        image = await archive.capture(event)
+        async_dispatcher_send(hass, ring_signal(entry), event | {"snapshot_url": image})
 
     async def fetch(earliest):
         try:

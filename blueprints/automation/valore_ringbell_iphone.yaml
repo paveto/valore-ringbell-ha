@@ -34,11 +34,19 @@ blueprint:
       default: default
       selector:
         text:
+    dashboard_path:
+      name: Cesta k nástěnce pro hovor
+      description: Například /valore-u-dveri/kamera. Prázdné pole otevře samotnou kameru.
+      default: ""
+      selector:
+        text:
 
 mode: queued
 max: 5
 variables:
   camera: !input camera_entity
+  sound: !input sound
+  dashboard: !input dashboard_path
 triggers:
   - trigger: state
     entity_id: !input ring_event
@@ -59,8 +67,10 @@ actions:
     type: notify
     title: Valore
     message: Někdo zvoní u dveří
-    data:
-      entity_id: "{{ camera }}"
-      url: "/?more-info-entity-id={{ camera }}"
-      push:
-        sound: !input sound
+    data: >-
+      {% set photo = trigger.to_state.attributes.get('snapshot_url')
+        if trigger is defined and trigger.to_state is defined and trigger.to_state is not none else none %}
+      {% set destination = (dashboard ~ ('&' if '?' in dashboard else '?') ~ 'valore_answer=1')
+        if dashboard else ('/?more-info-entity-id=' ~ camera) %}
+      {% set payload = {'url': destination, 'push': {'sound': sound}} %}
+      {{ dict(payload, image=photo) if photo else dict(payload, entity_id=camera) }}

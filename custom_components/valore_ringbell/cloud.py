@@ -13,6 +13,7 @@ from tuya_ipc_p2p_sdk.models import StreamConfig
 from tuya_mobile import TuyaMobileApp, get_mobile_app_profile
 
 from .mqtt import MobileClient, get_mqtt_identity
+from .doorbell_codec import DoorbellAudioDecoder
 from .rings import fetch_rings
 from .transport import ValoreSession
 
@@ -67,6 +68,7 @@ class Cloud:
         self.selected = None
         self.refresh_lock = asyncio.Lock()
         self.next_wake_check = 0.0
+        self.on_audio = None
 
     async def authenticate(self):
         profile = get_mobile_app_profile(TuyaMobileApp.TUYA_SMART)
@@ -166,7 +168,15 @@ class Cloud:
                 raise
             config = await self.rtc_config(self.mobile, device.id, key)
         await self.wake_if_asleep(self.mobile, device.id)
-        return ValoreSession(config, get_mqtt_identity(self.mobile, self.login), self.login.uid, on_frame)
+        decoder = DoorbellAudioDecoder()
+
+        def receive_audio(record):
+            if self.on_audio is not None and (pcm := decoder.decode(record)) is not None:
+                self.on_audio(*pcm)
+
+        return ValoreSession(
+            config, get_mqtt_identity(self.mobile, self.login), self.login.uid, on_frame, receive_audio
+        )
 
     async def rings(self, earliest):
         mobile = self.mobile

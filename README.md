@@ -30,7 +30,7 @@ Otevřením této entity můžeš ověřit obraz přímo v Home Assistantu.
 
 ### Webový zvonek
 
-Po instalaci verze 0.1.4 a restartu Home Assistantu načti webovou stránku znovu.
+Po instalaci nebo aktualizaci integrace a restartu Home Assistantu načti webovou stránku znovu.
 Na nástěnce zvol **Upravit nástěnku → Přidat kartu → Ručně**. Vlož konfiguraci
 a nahraď obě ID skutečnými ID svých entit.
 
@@ -43,8 +43,13 @@ event_entity: event.inteligentni_zvonek_zazvoneni
 
 Na kartě klikni na **Zapnout zvuk**. Krátké dvojité zazvonění ověří hlasitost.
 Dokud je karta otevřená na nástěnce, nový stisk ji rozezní a otevře živý obraz
-nejvýše na 45 sekund. **Otevřít obraz** a **Zavřít obraz** fungují i ručně.
-Prohlížeč může vyžadovat nové povolení zvuku po zavření nebo obnovení stránky.
+nejvýše na tři minuty, pokud nikdo hovor nepřijme. **Přijmout** otevře ovládání
+hovoru, **Poslouchat** zapne zvuk ze zvonku a **Mluvit** zapne mikrofon.
+Při mluvení se poslech ztiší, aby se omezila ozvěna. Mikrofon na iPhonu
+potřebuje přístup k Home Assistantu přes HTTPS a povolení v prohlížeči.
+Tlačítko **Položit**, zavření obrazu nebo opuštění karty ukončí přijatý
+hovor, jakmile se odpojí poslední aktivní divák. Ovládání zvuku vyžaduje účet
+správce Home Assistantu.
 
 ## Oznámení v Home Assistantu
 
@@ -54,8 +59,13 @@ Prohlížeč může vyžadovat nové povolení zvuku po zavření nebo obnovení
    a vytvoř z ní automatizaci.
 2. Vyber **Zazvonění**, kameru **Inteligentní zvonek** a svůj **iPhone**
    registrovaný v aplikaci Home Assistant. Ulož automatizaci.
-3. Po stisku iPhone přehraje zvuk oznámení. Klepnutím otevřeš kameru.
-   Podržením oznámení můžeš zobrazit náhled včetně živého MJPEG, pokud je zvonek dostupný.
+3. Nastav volitelnou cestu k nástěnce s kartou (například `/valore-u-dveri/kamera`).
+   Klepnutí na oznámení pak otevře kartu rovnou v režimu přijatého hovoru.
+4. Oznámení přehraje zvuk a připojí první snímek, pokud ho Home Assistant stihl
+   získat. Podržením oznámení zobrazíš snímek ve větším náhledu.
+
+Po aktualizaci dříve importované šablony ji znovu importuj v **Nastavení →
+Automatizace a scény → Šablony** a doplň cestu v existující automatizaci.
 
 Zvuk je ve výchozím nastavení stejný jako běžné oznámení Home Assistantu.
 Pokud máš vlastní zvuk, můžeš ho [importovat do Companion App](https://companion.home-assistant.io/docs/notifications/notification-sounds/#custom-push-notification-sounds)
@@ -64,11 +74,18 @@ jinou automatizaci s oznámením, vypni ji, aby iPhone nezazvonil dvakrát.
 
 Integrace kontroluje centrum zpráv Tuya každých 15 sekund při běžném provozu.
 Po zachycení stisku rovnou požádá o živý obraz a drží relaci připravenou
-maximálně minutu. Otevřený náhled na iPhonu nebo na webu může pokračovat
-i po této době. Automatické otevření probíhá i bez otevřené nástěnky.
+nejvýše tři minuty od zachycení stisku, pokud nikdo hovor nepřijme.
+Příprava obrazu probíhá i bez otevřené nástěnky.
 Při opakovaném výpadku nebo omezení požadavků interval prodlouží.
 Atribut `detection_delay_seconds` na entitě zazvonění ukazuje rozdíl mezi
 časem zprávy od Tuya a jejím zachycením v Home Assistantu.
+
+## Záznamy zazvonění
+
+První snímek a dostupnou část videa najdeš v **Média → Moje média →
+valore_ringbell**. Záznam se začne ukládat po zazvonění a dokončí se po ukončení
+relace. MP4 obsahuje obraz. Maximální délka jednoho souboru je deset minut.
+Záznamy zůstávají na úložišti Home Assistantu, dokud je nesmažeš.
 
 ## Apple Domácnost
 
@@ -102,5 +119,5 @@ Verze 0.1 nabízí živý obraz a událost tlačítka. U spícího bateriového 
 může náběh obrazu trvat déle než čeká Apple Domácnost. Při otevření náhledu
 integrace požádá o probuzení, pokud zařízení přes Tuya hlásí spánek nebo
 napájení z baterie bez údaje `wireless_awake`. Při potížích porovnej
-chování po fyzickém zazvonění a po delší době nečinnosti. Obousměrný zvuk
-z původního panelu do této verze ještě přenesený není.
+chování po fyzickém zazvonění a po delší době nečinnosti. Ovládání obousměrného
+zvuku je k dispozici na kartě v Home Assistantu.
