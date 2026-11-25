@@ -200,7 +200,11 @@ class VideoSession:
         return max(0, math.ceil(self.cooldown_until - time.monotonic()))
 
     def acquire(self):
-        closing = self.state == "closing" or (self.task is not None and self.task.cancelling())
+        task = self.task
+        # A cancelled task retains a nonzero cancellation count after it completes.
+        closing = self.state == "closing" or (
+            task is not None and not task.done() and task.cancelling()
+        )
         if self.shutdown or closing or (self.state == "idle" and self.retry_in):
             raise web.HTTPServiceUnavailable(
                 text="Camera unavailable. Retry shortly.",
