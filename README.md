@@ -41,7 +41,7 @@ camera: camera.inteligentni_zvonek
 event_entity: event.inteligentni_zvonek_zazvoneni
 ```
 
-Na kartě klikni na **Zapnout zvuk**. Krátké dvojité zazvonění ověří hlasitost.
+Na kartě klikni na **Zapnout zvonění**. Krátké dvojité zazvonění ověří hlasitost.
 Dokud je karta otevřená na nástěnce, nový stisk ji rozezní a otevře živý obraz
 nejvýše na tři minuty, pokud nikdo hovor nepřijme. **Přijmout** otevře ovládání
 hovoru, **Poslouchat** zapne zvuk ze zvonku a **Mluvit** zapne mikrofon.
@@ -66,6 +66,14 @@ správce Home Assistantu.
 
 Po aktualizaci dříve importované šablony ji znovu importuj v **Nastavení →
 Automatizace a scény → Šablony** a doplň cestu v existující automatizaci.
+
+Pro zobrazení stavu na zamčené obrazovce a v Dynamic Island zapni v šabloně
+volbu **Živá aktivita na iPhonu**. Aktivita při zazvonění ukáže odpočet
+a po otevření videa stav hovoru. Po ukončení relace se odstraní. Klepnutí
+otevře nástěnku v aplikaci. Snímek zůstává v běžném oznámení.
+V iPhonu povol Živé aktivity pro Home Assistant a v případě potřeby
+potvrď první zobrazení obsahu na zamčené obrazovce.
+[Podmínky v dokumentaci Companion](https://companion.home-assistant.io/docs/notifications/live-activities/).
 
 Zvuk je ve výchozím nastavení stejný jako běžné oznámení Home Assistantu.
 Pokud máš vlastní zvuk, můžeš ho [importovat do Companion App](https://companion.home-assistant.io/docs/notifications/notification-sounds/#custom-push-notification-sounds)

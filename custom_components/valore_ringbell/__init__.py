@@ -14,6 +14,7 @@ from homeassistant.const import CONF_DEVICE_ID, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers import device_registry
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from tuya_mobile import TuyaMobileInvalidAuth
@@ -106,7 +107,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ValoreEntry) -> bool:
     except (aiohttp.ClientError, RuntimeError, ValueError, TimeoutError, UnsupportedDevice):
         raise ConfigEntryNotReady("Tuya account or selected device is currently unavailable") from None
 
-    video = VideoSession(cloud.open_video)
+    @callback
+    def call_state_changed(state, deadline):
+        registry = device_registry.async_get(hass)
+        if device := registry.async_get_device(identifiers={(DOMAIN, data[CONF_DEVICE_ID])}):
+            hass.bus.async_fire(
+                "valore_ringbell_call_state",
+                {"device_id": device.id, "state": state, "deadline": deadline},
+            )
+
+    video = VideoSession(cloud.open_video, call_state_changed)
     media = LoopbackMedia(video)
     await media.start()
     cloud.on_audio = video.audio.publish

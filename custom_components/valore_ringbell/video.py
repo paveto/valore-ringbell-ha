@@ -44,8 +44,13 @@ def session_result(reason):
 
 
 class VideoSession:
-    def __init__(self, open_session):
+    def __init__(self, open_session, on_call_state=None):
         self.open_session = open_session
+        self.on_call_state = on_call_state
+        self.call_state = "idle"
+        self.ring_deadline = None
+        self.ring_snapshot = None
+        self.ring_snapshot_until = 0
         self.active_session = None
         self.audio = LiveAudio()
         self.task = None
@@ -83,6 +88,19 @@ class VideoSession:
         self.state = state
         self.notify()
 
+    def set_call_state(self, state):
+        if state == self.call_state:
+            return
+        self.call_state = state
+        if self.on_call_state is not None:
+            self.on_call_state(state, self.ring_deadline)
+
+    def recent_ring_image(self):
+        if self.ring_snapshot_until > time.monotonic():
+            return self.ring_snapshot
+        self.ring_snapshot = None
+        return None
+
     def on_frame(self, frame):
         if self.state not in ("connecting", "streaming"):
             return
@@ -102,6 +120,9 @@ class VideoSession:
         self.session_frames += 1
         self.sequence += 1
         self.frame = frame
+        if self.call_state != "idle" and self.ring_snapshot is None:
+            self.ring_snapshot = frame
+            self.ring_snapshot_until = now + RING_VIDEO_WINDOW
         self.set_state("streaming")
 
     def session_metrics(self, ended):
@@ -201,6 +222,7 @@ class VideoSession:
         finally:
             self.audio.close()
             self.set_state("idle")
+            self.set_call_state("idle")
 
     @property
     def retry_in(self):
@@ -249,7 +271,12 @@ class VideoSession:
         """Open one short preview when a doorbell press is received."""
         if not self.shutdown and (self.ring_preview is None or self.ring_preview.done()):
             self.ring_answered = asyncio.Event()
+            self.ring_deadline = int(time.time() + RING_VIDEO_WINDOW)
+            self.ring_snapshot = self.frame
+            self.ring_snapshot_until = time.monotonic() + RING_VIDEO_WINDOW
+            self.set_call_state("ringing")
             if self.interactive_viewers:
+                self.set_call_state("answered")
                 self.ring_answered.set()
             self.ring_preview = asyncio.create_task(self._prepare_for_ring(self.ring_answered))
 
@@ -270,16 +297,19 @@ class VideoSession:
         except (TimeoutError, web.HTTPServiceUnavailable):
             _LOGGER.debug("Valore ring video window ended")
             if not self.interactive_viewers:
+                self.set_call_state("idle")
                 await self.stop("unanswered")
 
     def answer_ring(self):
         self.interactive_viewers += 1
-        if self.ring_answered is not None:
+        if self.call_state == "ringing" and self.ring_answered is not None:
             self.ring_answered.set()
+            self.set_call_state("answered")
 
     async def close_ring(self):
         """Release the unanswered hold and disconnect the current relay."""
         self.ring_answered = None
+        self.set_call_state("idle")
         await self.cancel_ring_preview()
         await self.stop("hangup")
 
@@ -314,6 +344,7 @@ class VideoSession:
     async def stop(self, reason):
         if reason == "shutdown":
             self.shutdown = True
+            self.set_call_state("idle")
             await self.cancel_ring_preview()
             if self.idle is not None:
                 self.idle.cancel()

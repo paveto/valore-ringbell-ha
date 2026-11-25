@@ -38,8 +38,8 @@ class ValoreCamera(Camera):
     async def async_camera_image(self, width=None, height=None):
         """Use a recent live frame and bound waiting on a sleeping doorbell."""
         video = self.runtime.video
-        if video.frame is not None:
-            return video.frame
+        if (frame := video.frame or video.recent_ring_image()) is not None:
+            return frame
         try:
             await video.async_acquire()
             try:

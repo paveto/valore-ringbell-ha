@@ -34,6 +34,12 @@ blueprint:
       default: default
       selector:
         text:
+    live_activity:
+      name: Živá aktivita na iPhonu
+      description: Zobrazí stav hovoru na zamčené obrazovce a v Dynamic Island.
+      default: false
+      selector:
+        boolean:
     dashboard_path:
       name: Cesta k nástěnce pro hovor
       description: Například /valore-u-dveri/kamera. Prázdné pole otevře samotnou kameru.
@@ -42,35 +48,65 @@ blueprint:
         text:
 
 mode: queued
-max: 5
+max: 10
 variables:
   camera: !input camera_entity
   sound: !input sound
   dashboard: !input dashboard_path
+  live_activity: !input live_activity
+  tag: "{{ 'valore_' ~ camera.split('.')[-1][:56] }}"
+  destination: >-
+    {{ dashboard ~ ('&' if '?' in dashboard else '?') ~ 'valore_answer=1'
+       if dashboard else '/?more-info-entity-id=' ~ camera }}
 triggers:
   - trigger: state
+    id: ring
     entity_id: !input ring_event
     not_from:
       - unavailable
     not_to:
       - unavailable
       - unknown
+  - trigger: event
+    id: call
+    event_type: valore_ringbell_call_state
 conditions:
   - condition: template
-    value_template: >
+    value_template: >-
       {{ trigger is not defined or not trigger.platform or
-         (trigger.from_state is not none and trigger.to_state is not none and
-          trigger.to_state.attributes.get('event_type') == 'ring') }}
+         (trigger.id == 'ring' and trigger.from_state is not none and
+          trigger.to_state.attributes.get('event_type') == 'ring') or
+         (trigger.id == 'call' and live_activity and
+          trigger.event.data.device_id == device_id(camera)) }}
 actions:
-  - device_id: !input iphone
-    domain: mobile_app
-    type: notify
-    title: Valore
-    message: Někdo zvoní u dveří
-    data: >-
-      {% set photo = trigger.to_state.attributes.get('snapshot_url')
-        if trigger is defined and trigger.to_state is defined and trigger.to_state is not none else none %}
-      {% set destination = (dashboard ~ ('&' if '?' in dashboard else '?') ~ 'valore_answer=1')
-        if dashboard else ('/?more-info-entity-id=' ~ camera) %}
-      {% set payload = {'url': destination, 'push': {'sound': sound}} %}
-      {{ dict(payload, image=photo) if photo else dict(payload, entity_id=camera) }}
+  - if:
+      - condition: template
+        value_template: "{{ trigger is defined and trigger.id | default('') == 'call' }}"
+    then:
+      - device_id: !input iphone
+        domain: mobile_app
+        type: notify
+        title: U dveří
+        message: >-
+          {{ {'idle': 'clear_notification', 'ringing': 'Někdo zvoní u dveří',
+              'answered': 'Hovor probíhá'}[trigger.event.data.state] }}
+        data: >-
+          {% set state = trigger.event.data.state %}
+          {% set activity = {'tag': tag, 'live_update': true, 'url': destination,
+                             'alert_once': true, 'notification_icon': 'mdi:doorbell-video',
+                             'notification_icon_color': '#81E4CE', 'background_color': '#102321',
+                             'text_color': '#EAF7F2', 'relevance_score': 0.9} %}
+          {{ {'tag': tag} if state == 'idle' else
+             dict(activity, chronometer=true, when=trigger.event.data.deadline) if state == 'ringing' else
+             dict(activity, chronometer=false, silent=true, critical_text='Živý hovor') }}
+    else:
+      - device_id: !input iphone
+        domain: mobile_app
+        type: notify
+        title: Valore
+        message: Někdo zvoní u dveří
+        data: >-
+          {% set photo = trigger.to_state.attributes.get('snapshot_url')
+            if trigger is defined and trigger.to_state is defined and trigger.to_state is not none else none %}
+          {% set payload = {'url': destination, 'push': {'sound': sound}} %}
+          {{ dict(payload, image=photo) if photo else dict(payload, entity_id=camera) }}
