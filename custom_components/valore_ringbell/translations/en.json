@@ -1,0 +1,45 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Sign in to Tuya Smart",
+        "description": "Use the Tuya Smart account your doorbell is paired with.",
+        "data": {
+          "username": "Email",
+          "password": "Password",
+          "country_code": "Account country calling code"
+        }
+      },
+      "device": {
+        "title": "Select your doorbell",
+        "description": "Choose your Valore. The short code distinguishes devices with the same name.",
+        "data": { "device_id": "Tuya device" }
+      },
+      "reauth_confirm": {
+        "title": "Reconnect to Tuya Smart",
+        "data": { "password": "Current password" }
+      }
+    },
+    "error": {
+      "invalid_input": "Enter your email, password, and country calling code.",
+      "invalid_auth": "Tuya rejected the credentials. Check the email, password, and country calling code.",
+      "cannot_connect": "Tuya could not be reached. Try again in a moment.",
+      "no_devices": "No eligible devices were found on the account.",
+      "unsupported_device": "Tuya did not provide a compatible video configuration for this device. Select your Valore.",
+      "verification_required": "Tuya requires additional verification. Check your account in Tuya Smart.",
+      "account_locked": "Tuya has temporarily restricted sign-in. Try again later."
+    },
+    "abort": {
+      "already_configured": "This doorbell is already configured.",
+      "reauth_successful": "The account was reconnected."
+    }
+  },
+  "entity": {
+    "event": {
+      "ring": {
+        "name": "Doorbell",
+        "state_attributes": { "event_type": { "state": { "ring": "Doorbell pressed" } } }
+      }
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Přihlášení k Tuya Smart",
+        "description": "Použij účet Tuya Smart, ke kterému je zvonek připojený.",
+        "data": {
+          "username": "E-mail",
+          "password": "Heslo",
+          "country_code": "Telefonní předvolba země účtu"
+        }
+      },
+      "device": {
+        "title": "Výběr zvonku",
+        "description": "Vyber svůj Valore. Krátký kód pomáhá rozlišit zařízení se stejným názvem.",
+        "data": { "device_id": "Zařízení Tuya" }
+      },
+      "reauth_confirm": {
+        "title": "Obnovit přihlášení k Tuya Smart",
+        "data": { "password": "Aktuální heslo" }
+      }
+    },
+    "error": {
+      "invalid_input": "Zadej e-mail, heslo a kód země, například 420.",
+      "invalid_auth": "Tuya odmítla přihlašovací údaje. Zkontroluj e-mail, heslo a kód země.",
+      "cannot_connect": "Nepodařilo se získat odpověď od Tuya. Zkus to za chvíli.",
+      "no_devices": "Na účtu se nenašlo dostupné zařízení pro tuto integraci.",
+      "unsupported_device": "Tuya pro vybrané zařízení neposkytla kompatibilní video. Vyber svůj Valore.",
+      "verification_required": "Tuya požaduje další ověření. Otevři Tuya Smart a ověř účet.",
+      "account_locked": "Tuya dočasně omezila přihlášení. Počkej a zkontroluj účet v Tuya Smart."
+    },
+    "abort": {
+      "already_configured": "Tento zvonek už je přidaný.",
+      "reauth_successful": "Přihlášení bylo obnoveno."
+    }
+  },
+  "entity": {
+    "event": {
+      "ring": {
+        "name": "Zazvonění",
+        "state_attributes": { "event_type": { "state": { "ring": "Stisk zvonku" } } }
+      }
+    }
+  }
+}
