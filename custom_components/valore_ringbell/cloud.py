@@ -43,7 +43,15 @@ class VerifiedHttp:
     def post(self, url, **kwargs):
         if urlsplit(url).scheme != "https":
             raise ValueError("Tuya did not supply an HTTPS endpoint")
-        return self.session.post(url, allow_redirects=False, ssl=True, **kwargs)
+        return self.session.post(
+            url, allow_redirects=False, ssl=True,
+            raise_for_status=self.raise_if_rate_limited, **kwargs,
+        )
+
+    @staticmethod
+    async def raise_if_rate_limited(response):
+        if response.status == 429:
+            response.raise_for_status()
 
 
 class Cloud:

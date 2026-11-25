@@ -46,7 +46,10 @@ tap_action:
 Vytvoř automatizaci s triggerem **Stav** na entitě `event.…` z Valore a akcí
 `notify.mobile_app_…` svého iPhonu. Při volbě triggeru ponech pole **Z** a **Na**
 prázdná. V nastavení automatizace lze omezit oznámení například na konkrétní čas.
-Integrace kontroluje události Tuya každých 20 sekund při běžném provozu.
+Integrace kontroluje centrum zpráv Tuya každých 15 sekund při běžném provozu.
+Při opakovaném výpadku nebo omezení požadavků interval prodlouží.
+Atribut `detection_delay_seconds` na entitě zazvonění ukazuje rozdíl mezi
+časem zprávy od Tuya a jejím zachycením v Home Assistantu.
 
 ## Apple Domácnost
 

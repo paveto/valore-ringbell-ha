@@ -35,5 +35,11 @@ class ValoreDoorbell(EventEntity):
 
     @callback
     def _handle_ring(self, event):
-        self._trigger_event("ring", {"source_timestamp": event["timestamp"]})
+        self._trigger_event(
+            "ring",
+            {
+                "source_timestamp": event["timestamp"],
+                "detection_delay_seconds": max(0, event["detected_at"] - event["timestamp"]),
+            },
+        )
         self.async_write_ha_state()

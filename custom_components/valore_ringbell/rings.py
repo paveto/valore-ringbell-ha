@@ -9,8 +9,9 @@ import time
 
 import aiohttp
 
-POLL_INTERVAL = 20
+POLL_INTERVAL = 15
 MAX_BACKOFF = 120
+RATE_LIMIT_BACKOFF = 60
 EVENT_TTL = 180
 LOG = logging.getLogger(__name__)
 
@@ -36,6 +37,18 @@ def failure_reason(error):
     if isinstance(error, RuntimeError):
         return "mobile API rejected the request or returned an invalid envelope"
     return type(error).__name__
+
+
+def retry_delay(delay, consecutive_failures, error):
+    """Keep the first retry responsive and back off during longer failures."""
+    if isinstance(error, aiohttp.ClientResponseError) and error.status == 429:
+        retry_after = (error.headers or {}).get("Retry-After", "")
+        if retry_after.isascii() and retry_after.isdigit() and len(retry_after) < 10:
+            return max(RATE_LIMIT_BACKOFF, int(retry_after))
+        return RATE_LIMIT_BACKOFF
+    if consecutive_failures == 1:
+        return POLL_INTERVAL
+    return min(delay * 2, MAX_BACKOFF)
 
 
 def ring_events(rows, device_id, earliest):
@@ -86,24 +99,29 @@ async def watch_rings(fetch, deliver):
     pending = deque()
     known = {}
     delay = POLL_INTERVAL
+    consecutive_failures = 0
     last_failure = None
     LOG.info("Home Assistant: sledování stisku zvonku každých %s s.", POLL_INTERVAL)
     while True:
         cutoff = max(started, int(time.time()) - EVENT_TTL)
         known = {key: stamp for key, stamp in known.items() if stamp >= cutoff}
         try:
-            for event in await fetch(cutoff):
+            events = await fetch(cutoff)
+            detected_at = int(time.time())
+            for event in events:
                 identity = event["event_id"]
                 if identity not in known:
                     known[identity] = event["timestamp"]
-                    pending.append(event)
+                    pending.append(event | {"detected_at": detected_at})
             delay = POLL_INTERVAL
+            consecutive_failures = 0
             if last_failure is not None:
                 LOG.info("Tuya doorbell message polling recovered")
                 last_failure = None
         except Exception as exc:
             reason = failure_reason(exc)
-            delay = min(delay * 2, MAX_BACKOFF)
+            consecutive_failures += 1
+            delay = retry_delay(delay, consecutive_failures, exc)
             if reason != last_failure:
                 LOG.warning("Tuya doorbell message polling failed: %s. Retry in %s s", reason, delay)
                 last_failure = reason
