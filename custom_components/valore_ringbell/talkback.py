@@ -30,7 +30,7 @@ MAX_PRESS_SECONDS = 30
 TALK_RATE = 8000
 VOICE_LEVEL = 360
 VOICE_RELEASE = 0.5
-WAITING_TONE_INTERVAL = 8
+WAITING_TONE_INTERVAL = 2
 LOG = logging.getLogger(__name__)
 
 
@@ -193,7 +193,9 @@ async def play_waiting_tone(camera):
     """Play a short chime periodically while waiting for an answer."""
     owner = object()
     reported = False
+    clock = asyncio.get_running_loop().time
     while camera.call_state == "ringing":
+        cycle_started = clock()
         session = camera.active_session
         speaker = getattr(session, "speaker", None)
         if speaker is None:
@@ -224,7 +226,7 @@ async def play_waiting_tone(camera):
                     reported = True
             finally:
                 speaker.end(owner)
-        await asyncio.sleep(WAITING_TONE_INTERVAL)
+        await asyncio.sleep(max(0, cycle_started + WAITING_TONE_INTERVAL - clock()))
 
 
 async def gated_talk(camera, session, speaker, socket):

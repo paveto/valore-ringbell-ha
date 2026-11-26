@@ -68,6 +68,10 @@ triggers:
     not_to:
       - unavailable
       - unknown
+  - trigger: state
+    id: photo
+    entity_id: !input ring_event
+    attribute: snapshot_url
   - trigger: event
     id: call
     event_type: valore_ringbell_call_state
@@ -80,6 +84,9 @@ conditions:
       {{ trigger is not defined or not trigger.platform or
          (trigger.id == 'ring' and trigger.from_state is not none and
           trigger.to_state.attributes.get('event_type') == 'ring') or
+         (trigger.id == 'photo' and trigger.from_state is not none and trigger.to_state is not none and
+          trigger.from_state.state == trigger.to_state.state and
+          trigger.to_state.attributes.get('snapshot_url') and trigger.to_state.attributes.get('call_id') is string) or
          (trigger.id == 'call' and live_activity and
           trigger.event.data.device_id == device_id(camera)) or
          (trigger.id == 'hangup' and
@@ -126,9 +133,11 @@ actions:
                 if trigger is defined and trigger.to_state is defined and trigger.to_state is not none else none %}
               {% set call_id = trigger.to_state.attributes.get('call_id')
                 if trigger is defined and trigger.to_state is defined and trigger.to_state is not none else none %}
-              {% set payload = {'url': destination, 'push': {'sound': sound}} %}
+              {% set photo_update = trigger is defined and trigger.id | default('') == 'photo' %}
+              {% set payload = {'url': destination, 'push': {'sound': 'none' if photo_update else sound}} %}
               {% if call_id %}
-                {% set payload = dict(payload, actions=[{'action': hangup_prefix ~ call_id, 'title': 'Položit',
+                {% set payload = dict(payload, tag='valore_notification_' ~ call_id,
+                  actions=[{'action': hangup_prefix ~ call_id, 'title': 'Položit',
                   'destructive': true, 'authenticationRequired': true, 'icon': 'sfsymbols:phone.down'}]) %}
               {% endif %}
-              {{ dict(payload, image=photo) if photo else dict(payload, entity_id=camera) }}
+              {{ dict(payload, image=photo) if photo else payload }}

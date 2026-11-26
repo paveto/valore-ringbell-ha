@@ -168,16 +168,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ValoreEntry) -> bool:
             "Check the camera and stream errors in the system log"
         )
 
+    async def capture_ring(event):
+        if image := await archive.capture(event):
+            async_dispatcher_send(hass, ring_signal(entry), {
+                "event": "snapshot_ready", "event_id": event["event_id"], "snapshot_url": image,
+            })
+
     async def deliver(event):
         video.prepare_for_ring()
-        call_id = video.call_id
-        await media.notify_ring()
-        image = await archive.capture(event)
         async_dispatcher_send(hass, ring_signal(entry), event | {
-            "snapshot_url": image,
-            "call_id": call_id,
+            "call_id": video.call_id,
             "notification_prepare_seconds": max(0, int(time.time()) - event["detected_at"]),
         })
+        entry.async_create_background_task(hass, capture_ring(event), "Valore ring snapshot")
+        await media.notify_ring()
 
     async def fetch(earliest):
         try:

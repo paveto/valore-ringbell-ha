@@ -61,8 +61,8 @@ správce Home Assistantu.
    registrovaný v aplikaci Home Assistant. Ulož automatizaci.
 3. Nastav volitelnou cestu k nástěnce s kartou (například `/valore-u-dveri/kamera`).
    Klepnutí na oznámení pak otevře kartu rovnou v režimu přijatého hovoru.
-4. Oznámení přehraje zvuk a připojí první snímek, pokud ho Home Assistant stihl
-   získat. Podržením oznámení zobrazíš snímek ve větším náhledu
+4. Oznámení přehraje zvuk hned po zachycení stisku. Až je k dispozici snímek,
+   doplní se tiše do stejného oznámení. Podržením oznámení zobrazíš náhled
    a tlačítko **Položit** pro ukončení hovoru na dálku.
 
 Po aktualizaci dříve importované šablony ji znovu importuj v **Nastavení →
@@ -81,7 +81,7 @@ Pokud máš vlastní zvuk, můžeš ho [importovat do Companion App](https://com
 a do automatizace zadat název souboru. Pokud už máš pro tentýž zvonek
 jinou automatizaci s oznámením, vypni ji, aby iPhone nezazvonil dvakrát.
 
-Integrace kontroluje centrum zpráv Tuya každých 10 sekund při běžném provozu.
+Integrace kontroluje centrum zpráv Tuya každých 8 sekund při běžném provozu.
 Po zachycení stisku rovnou požádá o živý obraz a drží relaci připravenou
 nejvýše tři minuty od zachycení stisku, pokud nikdo hovor nepřijme.
 Příprava obrazu probíhá i bez otevřené nástěnky.
@@ -89,13 +89,13 @@ Při opakovaném výpadku nebo omezení požadavků interval prodlouží.
 Atribut `detection_delay_seconds` na entitě zazvonění ukazuje rozdíl mezi
 časem zprávy od Tuya a jejím zachycením v Home Assistantu. Atribut
 `notification_prepare_seconds` ukazuje čas od zachycení stisku po přípravu
-běžného oznámení s fotkou. Scrypted dostává stisk hned po zachycení.
+prvního oznámení. Scrypted dostává stisk hned po zachycení.
 
 ## Čekací tón ve zvonku
 
 V **Nastavení → Zařízení a služby → Valore Ringbell → Nastavit** zapni
 **Přehrávat čekací tón z reproduktoru zvonku**. Tón se ozve, jakmile je
-připraven zvukový kanál. Opakuje se do otevření živého obrazu, položení
+připraven zvukový kanál. Opakuje se přibližně každé dvě sekundy do otevření obrazu, položení
 nebo vypršení tříminutové relace. Starší nastavení `waiting_tone` v YAML
 se použije jako výchozí hodnota, dokud volbu neuložíš v integraci.
 

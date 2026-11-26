@@ -23,6 +23,7 @@ class ValoreDoorbell(EventEntity):
 
     def __init__(self, entry):
         self._entry = entry
+        self._event_id = None
         self._attr_device_info = device_info(entry)
         self._attr_unique_id = f"{entry.data[CONF_DEVICE_ID]}_ring"
 
@@ -35,12 +36,19 @@ class ValoreDoorbell(EventEntity):
 
     @callback
     def _handle_ring(self, event):
+        if event["event"] == "snapshot_ready":
+            if event["event_id"] == self._event_id:
+                self._attr_extra_state_attributes = {"snapshot_url": event["snapshot_url"]}
+                self.async_write_ha_state()
+            return
+
+        self._event_id = event["event_id"]
+        self._attr_extra_state_attributes = {"snapshot_url": None}
         self._trigger_event(
             "ring",
             {
                 "source_timestamp": event["timestamp"],
                 "detection_delay_seconds": max(0, event["detected_at"] - event["timestamp"]),
-                "snapshot_url": event.get("snapshot_url"),
                 "call_id": event.get("call_id"),
                 "notification_prepare_seconds": event.get("notification_prepare_seconds"),
             },

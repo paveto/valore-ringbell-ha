@@ -9,7 +9,7 @@ import time
 
 import aiohttp
 
-POLL_INTERVAL = 10
+POLL_INTERVAL = 8
 MAX_BACKOFF = 120
 RATE_LIMIT_BACKOFF = 60
 EVENT_TTL = 180
