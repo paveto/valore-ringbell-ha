@@ -2,6 +2,7 @@
 
 import asyncio
 import audioop
+import logging
 from contextlib import suppress
 from secrets import token_urlsafe
 
@@ -9,6 +10,8 @@ from aiohttp import web, WSMsgType
 
 from .talkback import talk_websocket
 from .video import FRAME_TIMEOUT, START_TIMEOUT
+
+_LOGGER = logging.getLogger(__name__)
 
 BOUNDARY = "valore"
 AUDIO_RATE = 8000
@@ -102,13 +105,16 @@ class LoopbackMedia:
         except ConnectionError:
             return response
         finally:
-            if interactive:
-                self.video.interactive_viewers -= 1
-            self.video.release()
-            if (interactive and not self.video.interactive_viewers and self.video.ring_answered is not None
-                    and self.video.ring_answered.is_set()):
-                self.video.ring_answered = None
-                await self.video.close_ring()
+            await self.release_viewer(interactive)
+
+    async def release_viewer(self, interactive):
+        if interactive:
+            self.video.interactive_viewers -= 1
+        self.video.release()
+        if (interactive and not self.video.interactive_viewers and self.video.ring_answered is not None
+                and self.video.ring_answered.is_set()):
+            self.video.ring_answered = None
+            await self.video.close_ring()
 
     async def pcm(self, request):
         """Supply fixed-rate mono PCM to FFmpeg for the current relay."""
@@ -148,44 +154,80 @@ class LoopbackMedia:
         finally:
             audio.listeners.discard(queue)
 
+    async def feed_mjpeg(self, writer, sequence, frame):
+        try:
+            while True:
+                writer.write(frame)
+                await writer.drain()
+                sequence, frame = await self.video.wait_frame(sequence)
+        except (ConnectionError, web.HTTPServiceUnavailable):
+            pass
+        finally:
+            writer.close()
+
     async def av(self, request, ffmpeg):
         """Mux the active video and microphone into one FFmpeg input."""
-        if not self.source or not self.audio_source or self.av_clients >= AV_CLIENT_LIMIT:
+        if not self.audio_source or self.av_clients >= AV_CLIENT_LIMIT:
             raise web.HTTPServiceUnavailable()
         self.av_clients += 1
+        acquired = False
         process = None
+        feeder = None
+        phase = "acquire"
+        response = web.StreamResponse(headers={
+            "Content-Type": "video/mp2t", "Cache-Control": "no-store",
+        })
         try:
+            await self.video.async_acquire(wait=True)
+            acquired = True
+            self.video.answer_ring()
+            phase = "wait_first_jpeg"
+            async with asyncio.timeout(START_TIMEOUT + FRAME_TIMEOUT):
+                sequence, frame = await self.video.wait_frame()
+            phase = "start_muxer"
             process = await asyncio.create_subprocess_exec(
                 ffmpeg, "-v", "error", "-nostdin",
-                "-use_wallclock_as_timestamps", "1", "-f", "mpjpeg", "-i", self.source,
+                "-use_wallclock_as_timestamps", "1", "-probesize", "32", "-analyzeduration", "1",
+                "-f", "image2pipe", "-framerate", "25", "-c:v", "mjpeg", "-i", "pipe:0",
+                "-probesize", "32", "-analyzeduration", "1",
                 "-f", "s16le", "-ar", str(AUDIO_RATE), "-ac", "1", "-i", self.audio_source,
                 "-map", "0:v:0", "-map", "1:a:0",
-                "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency",
-                "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2", "-fps_mode", "vfr", "-pix_fmt", "yuv420p", "-g", "15",
-                "-af", "aresample=async=1", "-c:a", "aac", "-ar", "16000",
-                "-shortest", "-flush_packets", "1", "-f", "mpegts", "pipe:1",
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+                "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency", "-profile:v", "baseline",
+                "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2", "-fps_mode", "vfr", "-pix_fmt", "yuv420p",
+                "-g", "15", "-af", "aresample=async=1", "-c:a", "aac", "-ar", "16000",
+                "-muxdelay", "0", "-muxpreload", "0", "-flush_packets", "1",
+                "-f", "mpegts", "pipe:1",
+                stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
             )
-            async with asyncio.timeout(START_TIMEOUT + FRAME_TIMEOUT + 5):
+            feeder = asyncio.create_task(self.feed_mjpeg(process.stdin, sequence, frame))
+            async with asyncio.timeout(8):
                 first = await process.stdout.read(1316)
             if not first:
                 raise web.HTTPServiceUnavailable()
-            response = web.StreamResponse(headers={
-                "Content-Type": "video/mp2t", "Cache-Control": "no-store",
-            })
             await response.prepare(request)
             await response.write(first)
             while chunk := await process.stdout.read(8192):
                 await response.write(chunk)
             return response
-        except TimeoutError:
-            raise web.HTTPServiceUnavailable() from None
+        except (TimeoutError, web.HTTPServiceUnavailable):
+            _LOGGER.warning("Valore Scrypted stream could not start: %s", phase)
+            if not response.prepared:
+                raise web.HTTPServiceUnavailable() from None
+            return response
+        except ConnectionError:
+            return response
         finally:
-            self.av_clients -= 1
+            if feeder is not None:
+                feeder.cancel()
+                await asyncio.gather(feeder, return_exceptions=True)
             if process is not None and process.returncode is None:
                 with suppress(ProcessLookupError):
                     process.kill()
                 await process.communicate()
+            self.av_clients -= 1
+            if acquired:
+                await self.release_viewer(True)
 
     async def snapshot(self, request):
         """Use the current or recent call to avoid waking a sleeping doorbell."""

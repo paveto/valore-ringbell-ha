@@ -113,7 +113,7 @@ export default class ValoreDoorbell extends ScryptedDeviceBase implements Camera
         const url = await bridgeLink() + '/av';
         const input: FFmpegInput = {
             url, container: 'mpegts', mediaStreamOptions: stream,
-            inputArguments: ['-f', 'mpegts', '-i', url],
+            inputArguments: ['-probesize', '65536', '-analyzeduration', '500000', '-f', 'mpegts', '-i', url],
         };
         return sdk.mediaManager.createMediaObject(Buffer.from(JSON.stringify(input)), ScryptedMimeTypes.FFmpegInput);
     }
