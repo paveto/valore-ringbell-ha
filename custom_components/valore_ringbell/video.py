@@ -173,7 +173,10 @@ class VideoSession:
             async with asyncio.timeout(START_TIMEOUT):
                 stream = await self.open_session(self.on_frame)
                 self.active_session = stream
+                if hasattr(stream, "on_speaker_ready"):
+                    stream.on_speaker_ready = self.notify
                 await stream.async_start()
+                self.notify()
             result = await self.wait_for_end(stream)
         except asyncio.CancelledError:
             result = {"end": self.stopping or "cancelled"}
@@ -291,20 +294,16 @@ class VideoSession:
         try:
             async with asyncio.timeout(RING_VIDEO_WINDOW):
                 await self.async_acquire(wait=True)
+                answered = asyncio.create_task(ring_answered.wait())
+                tone = (asyncio.create_task(play_waiting_tone(self))
+                        if self.waiting_tone and not ring_answered.is_set() else None)
                 try:
-                    await self.wait_frame()
-                    _LOGGER.debug("Valore video is ready for the caller")
-                    answered = asyncio.create_task(ring_answered.wait())
-                    tone = (asyncio.create_task(play_waiting_tone(self))
-                            if self.waiting_tone and not ring_answered.is_set() else None)
-                    try:
-                        await asyncio.wait((answered, self.task), return_when=asyncio.FIRST_COMPLETED)
-                    finally:
-                        answered.cancel()
-                        if tone is not None:
-                            tone.cancel()
-                            await asyncio.gather(tone, return_exceptions=True)
+                    await asyncio.wait((answered, self.task), return_when=asyncio.FIRST_COMPLETED)
                 finally:
+                    answered.cancel()
+                    if tone is not None:
+                        tone.cancel()
+                        await asyncio.gather(tone, return_exceptions=True)
                     self.release()
         except (TimeoutError, web.HTTPServiceUnavailable):
             _LOGGER.debug("Valore ring video window ended")

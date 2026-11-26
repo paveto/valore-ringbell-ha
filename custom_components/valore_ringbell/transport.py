@@ -31,6 +31,7 @@ class ValoreSession(StreamSession):
         super().__init__(config, identity, uid, on_frame)
         self.on_audio = on_audio
         self.speaker = None
+        self.on_speaker_ready = None
 
     def _send_channel_zero(self, send_key, receive_key):
         relay = self._require_relay()
@@ -39,6 +40,8 @@ class ValoreSession(StreamSession):
             audio = relay._conversation(2)
             audio.set_message_handler(lambda record: self._on_audio_record(record, receive_key))
         super()._send_channel_zero(send_key, receive_key)
+        if self.on_speaker_ready is not None:
+            self.on_speaker_ready()
 
     def _on_control_record(self, record, receive_key):
         if self.speaker is not None:

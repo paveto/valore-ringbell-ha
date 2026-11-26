@@ -7,6 +7,7 @@ import aiohttp
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_DEVICE_ID, CONF_PASSWORD, CONF_USERNAME
+from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     SelectSelector, SelectSelectorConfig, SelectSelectorMode, TextSelector,
@@ -18,7 +19,7 @@ from tuya_mobile import (
 )
 
 from .cloud import Cloud, UnsupportedDevice
-from .const import CONF_COUNTRY_CODE, CONF_DEVICE_NAME, DOMAIN
+from .const import CONF_COUNTRY_CODE, CONF_DEVICE_NAME, CONF_WAITING_TONE, DOMAIN
 
 NETWORK_ERRORS = (aiohttp.ClientError, TimeoutError, RuntimeError, ValueError)
 
@@ -27,6 +28,11 @@ class ValoreConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Set up one doorbell per config entry."""
 
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry):
+        return ValoreOptionsFlow()
 
     def __init__(self):
         self.cloud = None
@@ -140,3 +146,17 @@ class ValoreConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(step_id="reauth_confirm", data_schema=vol.Schema({
             vol.Required(CONF_PASSWORD): TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD)),
         }), errors=errors)
+
+class ValoreOptionsFlow(config_entries.OptionsFlowWithReload):
+    """Configure the waiting tone for this doorbell."""
+
+    async def async_step_init(self, user_input=None):
+        if user_input is not None:
+            return self.async_create_entry(data=self.config_entry.options | user_input)
+        defaults = self.hass.data.get(DOMAIN, {})
+        enabled = self.config_entry.options.get(
+            CONF_WAITING_TONE, defaults.get(CONF_WAITING_TONE, False),
+        )
+        return self.async_show_form(step_id="init", data_schema=vol.Schema({
+            vol.Required(CONF_WAITING_TONE, default=enabled): bool,
+        }))

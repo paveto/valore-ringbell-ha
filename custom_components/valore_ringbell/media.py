@@ -171,6 +171,7 @@ class LoopbackMedia:
             raise web.HTTPServiceUnavailable()
         self.av_clients += 1
         acquired = False
+        interactive = False
         process = None
         feeder = None
         phase = "acquire"
@@ -180,7 +181,6 @@ class LoopbackMedia:
         try:
             await self.video.async_acquire(wait=True)
             acquired = True
-            self.video.answer_ring()
             phase = "wait_first_jpeg"
             async with asyncio.timeout(START_TIMEOUT + FRAME_TIMEOUT):
                 sequence, frame = await self.video.wait_frame()
@@ -207,6 +207,8 @@ class LoopbackMedia:
                 raise web.HTTPServiceUnavailable()
             await response.prepare(request)
             await response.write(first)
+            self.video.answer_ring()
+            interactive = True
             while chunk := await process.stdout.read(8192):
                 await response.write(chunk)
             return response
@@ -227,7 +229,7 @@ class LoopbackMedia:
                 await process.communicate()
             self.av_clients -= 1
             if acquired:
-                await self.release_viewer(True)
+                await self.release_viewer(interactive)
 
     async def snapshot(self, request):
         """Use the current or recent call to avoid waking a sleeping doorbell."""

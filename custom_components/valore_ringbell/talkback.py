@@ -192,26 +192,36 @@ class Speaker:
 async def play_waiting_tone(camera):
     """Play a short chime periodically while waiting for an answer."""
     owner = object()
+    reported = False
     while camera.call_state == "ringing":
         session = camera.active_session
         speaker = getattr(session, "speaker", None)
-        if speaker is not None and speaker.owner is None:
+        if speaker is None:
+            await camera.changed.wait()
+            continue
+        if speaker.owner is None:
             try:
                 _, rate = await speaker.begin(owner)
                 packet_samples = rate // 50
-                samples = packet_samples * 12
+                samples = packet_samples * 18
+                sent_before = speaker.frames
                 for offset in range(0, samples, packet_samples):
                     if camera.call_state != "ringing" or camera.active_session is not session:
                         break
                     packet = pack(f"<{packet_samples}h", *(
-                        int(3000 * min(1, index / (rate / 100), (samples - index) / (rate / 100))
+                        int(5200 * min(1, index / (rate / 100), (samples - index) / (rate / 100))
                             * sin(2 * pi * 520 * index / rate))
                         for index in range(offset, offset + packet_samples)
                     ))
                     speaker.send(owner, packet)
                     await asyncio.sleep(0.02)
-            except (TalkError, RuntimeError):
-                LOG.debug("Waiting tone unavailable on active Valore session")
+                if not reported and speaker.frames > sent_before:
+                    LOG.info("Valore waiting tone sent to the doorbell")
+                    reported = True
+            except (TalkError, RuntimeError) as exc:
+                if not reported:
+                    LOG.warning("Valore waiting tone could not start: %s", type(exc).__name__)
+                    reported = True
             finally:
                 speaker.end(owner)
         await asyncio.sleep(WAITING_TONE_INTERVAL)

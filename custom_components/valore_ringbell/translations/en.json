@@ -34,6 +34,14 @@
       "reauth_successful": "The account was reconnected."
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Doorbell settings",
+        "data": { "waiting_tone": "Play a waiting tone through the doorbell speaker" }
+      }
+    }
+  },
   "entity": {
     "event": {
       "ring": {

@@ -34,6 +34,14 @@
       "reauth_successful": "Přihlášení bylo obnoveno."
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Nastavení zvonku",
+        "data": { "waiting_tone": "Přehrávat čekací tón z reproduktoru zvonku" }
+      }
+    }
+  },
   "entity": {
     "event": {
       "ring": {

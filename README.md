@@ -93,17 +93,11 @@ běžného oznámení s fotkou. Scrypted dostává stisk hned po zachycení.
 
 ## Čekací tón ve zvonku
 
-Pro krátký tón z reproduktoru při čekání přidej v `configuration.yaml`
-do existující sekce `valore_ringbell:` nastavení:
-
-```yaml
-valore_ringbell:
-  waiting_tone: true
-```
-
-Případný řádek `scrypted_camera` ponech ve stejné sekci. Tón se ozve, jakmile
-zvonek naváže spojení, a opakuje se do otevření živého obrazu, položení nebo
-vypršení tříminutové relace.
+V **Nastavení → Zařízení a služby → Valore Ringbell → Nastavit** zapni
+**Přehrávat čekací tón z reproduktoru zvonku**. Tón se ozve, jakmile je
+připraven zvukový kanál. Opakuje se do otevření živého obrazu, položení
+nebo vypršení tříminutové relace. Starší nastavení `waiting_tone` v YAML
+se použije jako výchozí hodnota, dokud volbu neuložíš v integraci.
 
 ## Záznamy zazvonění
 

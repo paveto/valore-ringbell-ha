@@ -25,7 +25,7 @@ from tuya_mobile import TuyaMobileInvalidAuth
 
 from .archive import RingArchive
 from .cloud import Cloud, UnsupportedDevice
-from .const import CONF_COUNTRY_CODE, CONF_DEVICE_NAME, DOMAIN, PLATFORMS
+from .const import CONF_COUNTRY_CODE, CONF_DEVICE_NAME, CONF_WAITING_TONE, DOMAIN, PLATFORMS
 from .media import LoopbackMedia
 from .live_audio import LiveAudio
 from .rings import watch_rings
@@ -37,11 +37,10 @@ _LOGGER = logging.getLogger(__name__)
 CARD_URL = "/valore_ringbell/card.js"
 BRIDGE_KEY = "valore_ringbell.scrypted"
 BRIDGE_CAMERA = "scrypted_camera"
-WAITING_TONE = "waiting_tone"
 CONFIG_SCHEMA = vol.Schema(
     {vol.Optional(DOMAIN): vol.Schema({
         vol.Optional(BRIDGE_CAMERA): cv.entity_domain("camera"),
-        vol.Optional(WAITING_TONE, default=False): cv.boolean,
+        vol.Optional(CONF_WAITING_TONE, default=False): cv.boolean,
     })},
     extra=vol.ALLOW_EXTRA,
 )
@@ -143,7 +142,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ValoreEntry) -> bool:
             )
 
     options = hass.data[DOMAIN]
-    video = VideoSession(cloud.open_video, call_state_changed, waiting_tone=options.get(WAITING_TONE, False))
+    waiting_tone = entry.options.get(CONF_WAITING_TONE, options.get(CONF_WAITING_TONE, False))
+    video = VideoSession(cloud.open_video, call_state_changed, waiting_tone=waiting_tone)
     media = LoopbackMedia(video)
     registry = entity_registry.async_get(hass)
     camera_id = registry.async_get_entity_id("camera", DOMAIN, f"{data[CONF_DEVICE_ID]}_camera")
