@@ -45,7 +45,7 @@ class LoopbackMedia:
                 return await self.av(request, bridge_ffmpeg)
 
             async def talk(request):
-                return await talk_websocket(request, self.video, max_seconds=600)
+                return await talk_websocket(request, self.video, max_seconds=600, voice_gate=True)
 
             app.router.add_get(prefix + "/audio.pcm", self.pcm, allow_head=False)
             app.router.add_get(prefix + "/av", mux, allow_head=False)

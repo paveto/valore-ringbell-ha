@@ -4,6 +4,7 @@ import asyncio
 import audioop
 from contextlib import suppress
 import logging
+from math import pi, sin
 from struct import pack, unpack_from
 import time
 
@@ -26,6 +27,10 @@ CODECS = {
     0x86: ("G.711 A-law", audioop.lin2alaw),
 }
 MAX_PRESS_SECONDS = 30
+TALK_RATE = 8000
+VOICE_LEVEL = 360
+VOICE_RELEASE = 0.5
+WAITING_TONE_INTERVAL = 8
 LOG = logging.getLogger(__name__)
 
 
@@ -184,7 +189,69 @@ class Speaker:
                 self._send_command(SPEAKER_CONTROL, pack("<II", 0, SPEAKER_STOP))
 
 
-async def talk_websocket(request, camera, *, max_seconds=MAX_PRESS_SECONDS):
+async def play_waiting_tone(camera):
+    """Play a short chime periodically while waiting for an answer."""
+    owner = object()
+    while camera.call_state == "ringing":
+        session = camera.active_session
+        speaker = getattr(session, "speaker", None)
+        if speaker is not None and speaker.owner is None:
+            try:
+                _, rate = await speaker.begin(owner)
+                packet_samples = rate // 50
+                samples = packet_samples * 12
+                for offset in range(0, samples, packet_samples):
+                    if camera.call_state != "ringing" or camera.active_session is not session:
+                        break
+                    packet = pack(f"<{packet_samples}h", *(
+                        int(3000 * min(1, index / (rate / 100), (samples - index) / (rate / 100))
+                            * sin(2 * pi * 520 * index / rate))
+                        for index in range(offset, offset + packet_samples)
+                    ))
+                    speaker.send(owner, packet)
+                    await asyncio.sleep(0.02)
+            except (TalkError, RuntimeError):
+                LOG.debug("Waiting tone unavailable on active Valore session")
+            finally:
+                speaker.end(owner)
+        await asyncio.sleep(WAITING_TONE_INTERVAL)
+
+
+async def gated_talk(camera, session, speaker, socket):
+    """Release the device speaker between speech bursts on Apple Home."""
+    await socket.send_json({"ready": True, "codec": "PCM16", "sample_rate": TALK_RATE})
+    clock = asyncio.get_running_loop().time
+    deadline = None
+    rate = None
+    rate_state = None
+    while camera.active_session is session and camera.state == "streaming":
+        try:
+            async with asyncio.timeout_at(deadline):
+                message = await socket.receive()
+        except TimeoutError:
+            LOG.debug("Valore speaker paused; camera audio chunks: %s", camera.audio.chunks)
+            speaker.end(socket)
+            deadline = rate = rate_state = None
+            continue
+        if message.type != WSMsgType.BINARY or len(message.data) != TALK_RATE // 25:
+            break
+        pcm = message.data
+        if audioop.rms(pcm, 2) >= VOICE_LEVEL:
+            if rate is None:
+                if speaker.owner is not None:
+                    continue
+                _, rate = await speaker.begin(socket)
+                LOG.debug("Valore speaker resumed; camera audio chunks: %s", camera.audio.chunks)
+            deadline = clock() + VOICE_RELEASE
+        if rate == 16000:
+            pcm, rate_state = audioop.ratecv(pcm, 2, 1, TALK_RATE, rate, rate_state)
+            # ratecv emits one sample fewer on the first packet of a new burst.
+            pcm = pcm.ljust(rate // 25, b"\0")
+        if rate is not None:
+            speaker.send(socket, pcm)
+
+
+async def talk_websocket(request, camera, *, max_seconds=MAX_PRESS_SECONDS, voice_gate=False):
     session = camera.active_session
     speaker = getattr(session, "speaker", None)
     if camera.state != "streaming" or not camera.viewers or speaker is None:
@@ -194,15 +261,18 @@ async def talk_websocket(request, camera, *, max_seconds=MAX_PRESS_SECONDS):
     await socket.prepare(request)
     try:
         async with asyncio.timeout(max_seconds):
-            codec, sample_rate = await speaker.begin(socket)
-            await socket.send_json({"ready": True, "codec": codec, "sample_rate": sample_rate})
-            pcm_bytes = sample_rate // 25
-            async for message in socket:
-                if camera.active_session is not session or camera.state != "streaming":
-                    break
-                if message.type != WSMsgType.BINARY or len(message.data) != pcm_bytes:
-                    break
-                speaker.send(socket, message.data)
+            if voice_gate:
+                await gated_talk(camera, session, speaker, socket)
+            else:
+                codec, sample_rate = await speaker.begin(socket)
+                await socket.send_json({"ready": True, "codec": codec, "sample_rate": sample_rate})
+                pcm_bytes = sample_rate // 25
+                async for message in socket:
+                    if camera.active_session is not session or camera.state != "streaming":
+                        break
+                    if message.type != WSMsgType.BINARY or len(message.data) != pcm_bytes:
+                        break
+                    speaker.send(socket, message.data)
     except (TalkError, RuntimeError) as exc:
         if isinstance(exc, TalkError):
             message = str(exc)

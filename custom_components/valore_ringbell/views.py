@@ -40,10 +40,15 @@ def get_runtime(request, entity_id):
     user = request[KEY_HASS_USER]
     if not user or not user.is_admin:
         raise web.HTTPForbidden
-    hass = request.app[KEY_HASS]
+    if runtime := get_camera_runtime(request.app[KEY_HASS], entity_id):
+        return runtime
+    raise web.HTTPNotFound
+
+
+def get_camera_runtime(hass, entity_id):
     entity = entity_registry.async_get(hass).async_get(entity_id)
     if entity and entity.domain == "camera" and entity.platform == DOMAIN and entity.config_entry_id:
         entry = hass.config_entries.async_get_entry(entity.config_entry_id)
         if entry and (runtime := getattr(entry, "runtime_data", None)):
             return runtime
-    raise web.HTTPNotFound
+    return None

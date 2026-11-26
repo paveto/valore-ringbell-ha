@@ -3,6 +3,7 @@
 import asyncio
 from importlib.metadata import version
 
+from aiohttp.web import WebSocketResponse
 from tuya_ipc_p2p_sdk.control import parse_control
 from tuya_ipc_p2p_sdk.crypto import decrypt_record
 from tuya_ipc_p2p_sdk.exceptions import TuyaIpcP2pError, TuyaIpcP2pSessionError
@@ -54,7 +55,7 @@ class ValoreSession(StreamSession):
         try:
             await super().async_close()
         finally:
-            if owner is not None:
+            if isinstance(owner, WebSocketResponse):
                 await owner.close(drain=False)
 
     def _on_audio_record(self, record, receive_key):

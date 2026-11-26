@@ -19,6 +19,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import config_validation as cv, device_registry, entity_registry
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.service import async_register_admin_service
 from homeassistant.helpers.storage import Store
 from tuya_mobile import TuyaMobileInvalidAuth
 
@@ -30,21 +31,36 @@ from .live_audio import LiveAudio
 from .rings import watch_rings
 from .transport import enable_verified_mqtt
 from .video import VideoSession
-from .views import DoorbellAudioView, DoorbellHangupView
+from .views import DoorbellAudioView, DoorbellHangupView, get_camera_runtime
 
 _LOGGER = logging.getLogger(__name__)
 CARD_URL = "/valore_ringbell/card.js"
 BRIDGE_KEY = "valore_ringbell.scrypted"
 BRIDGE_CAMERA = "scrypted_camera"
+WAITING_TONE = "waiting_tone"
 CONFIG_SCHEMA = vol.Schema(
-    {vol.Optional(DOMAIN): vol.Schema({vol.Optional(BRIDGE_CAMERA): cv.entity_domain("camera")})},
+    {vol.Optional(DOMAIN): vol.Schema({
+        vol.Optional(BRIDGE_CAMERA): cv.entity_domain("camera"),
+        vol.Optional(WAITING_TONE, default=False): cv.boolean,
+    })},
     extra=vol.ALLOW_EXTRA,
 )
 
 
 async def async_setup(hass, config):
     """Make the dashboard card available without exposing any camera data."""
-    hass.data[DOMAIN] = config.get(DOMAIN, {}).get(BRIDGE_CAMERA)
+    hass.data[DOMAIN] = config.get(DOMAIN, {})
+
+    async def hangup(call):
+        runtime = get_camera_runtime(hass, call.data["entity_id"])
+        if runtime is not None and runtime.video.call_id == call.data["call_id"]:
+            await runtime.video.close_ring()
+
+    async_register_admin_service(hass, DOMAIN, "hangup", hangup, vol.Schema({
+        vol.Required("entity_id"): cv.entity_domain("camera"),
+        vol.Required("call_id"): vol.Match(r"^[a-f0-9]{24}$"),
+    }))
+
     await hass.http.async_register_static_paths([
         StaticPathConfig(
             f"/valore_ringbell/{name}", str(Path(__file__).with_name("frontend") / name),
@@ -126,11 +142,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ValoreEntry) -> bool:
                 {"device_id": device.id, "state": state, "deadline": deadline},
             )
 
-    video = VideoSession(cloud.open_video, call_state_changed)
+    options = hass.data[DOMAIN]
+    video = VideoSession(cloud.open_video, call_state_changed, waiting_tone=options.get(WAITING_TONE, False))
     media = LoopbackMedia(video)
     registry = entity_registry.async_get(hass)
     camera_id = registry.async_get_entity_id("camera", DOMAIN, f"{data[CONF_DEVICE_ID]}_camera")
-    configured_camera = hass.data.get(DOMAIN)
+    configured_camera = options.get(BRIDGE_CAMERA)
     bridge_enabled = configured_camera is not None and camera_id == configured_camera
     ffmpeg = get_ffmpeg_manager(hass).binary
     await media.start(ffmpeg if bridge_enabled else None)
@@ -153,10 +170,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ValoreEntry) -> bool:
 
     async def deliver(event):
         video.prepare_for_ring()
+        call_id = video.call_id
         await media.notify_ring()
         image = await archive.capture(event)
         async_dispatcher_send(hass, ring_signal(entry), event | {
             "snapshot_url": image,
+            "call_id": call_id,
             "notification_prepare_seconds": max(0, int(time.time()) - event["detected_at"]),
         })
 

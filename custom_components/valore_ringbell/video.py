@@ -6,12 +6,14 @@ import io
 import logging
 import math
 import re
+from secrets import token_hex
 import time
 
 from aiohttp import web
 from PIL import Image
 from tuya_ipc_p2p_sdk.exceptions import TuyaIpcP2pDeviceBusyError
 
+from .talkback import play_waiting_tone
 from .transport import DeviceAnswerTimeout
 from .live_audio import LiveAudio
 
@@ -44,9 +46,11 @@ def session_result(reason):
 
 
 class VideoSession:
-    def __init__(self, open_session, on_call_state=None):
+    def __init__(self, open_session, on_call_state=None, *, waiting_tone=False):
         self.open_session = open_session
         self.on_call_state = on_call_state
+        self.waiting_tone = waiting_tone
+        self.call_id = None
         self.call_state = "idle"
         self.ring_deadline = None
         self.ring_snapshot = None
@@ -92,6 +96,8 @@ class VideoSession:
         if state == self.call_state:
             return
         self.call_state = state
+        if state == "idle":
+            self.call_id = None
         if self.on_call_state is not None:
             self.on_call_state(state, self.ring_deadline)
 
@@ -271,6 +277,7 @@ class VideoSession:
         """Open one short preview when a doorbell press is received."""
         if not self.shutdown and (self.ring_preview is None or self.ring_preview.done()):
             self.ring_answered = asyncio.Event()
+            self.call_id = token_hex(12)
             self.ring_deadline = int(time.time() + RING_VIDEO_WINDOW)
             self.ring_snapshot = self.frame
             self.ring_snapshot_until = time.monotonic() + RING_VIDEO_WINDOW
@@ -288,10 +295,15 @@ class VideoSession:
                     await self.wait_frame()
                     _LOGGER.debug("Valore video is ready for the caller")
                     answered = asyncio.create_task(ring_answered.wait())
+                    tone = (asyncio.create_task(play_waiting_tone(self))
+                            if self.waiting_tone and not ring_answered.is_set() else None)
                     try:
                         await asyncio.wait((answered, self.task), return_when=asyncio.FIRST_COMPLETED)
                     finally:
                         answered.cancel()
+                        if tone is not None:
+                            tone.cancel()
+                            await asyncio.gather(tone, return_exceptions=True)
                 finally:
                     self.release()
         except (TimeoutError, web.HTTPServiceUnavailable):

@@ -162,8 +162,7 @@ class ValoreDoorbellCard extends HTMLElement {
     this.talker = new DoorbellTalk(showAudio, (active) => {
       this.talkButton.querySelector("span").textContent = active ? "Přestat mluvit" : "Mluvit";
       this.talkButton.setAttribute("aria-pressed", String(active));
-      if (active && this.listener.gain) this.listener.setVolume(0);
-      else this.listener.setVolume(0.7);
+      this.listener.setVolume(active ? 0.3 : 0.7);
     }, sign);
     this.image.addEventListener("load", () => {
       if (!this.videoOpen) return;

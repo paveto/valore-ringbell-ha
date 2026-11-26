@@ -62,7 +62,8 @@ správce Home Assistantu.
 3. Nastav volitelnou cestu k nástěnce s kartou (například `/valore-u-dveri/kamera`).
    Klepnutí na oznámení pak otevře kartu rovnou v režimu přijatého hovoru.
 4. Oznámení přehraje zvuk a připojí první snímek, pokud ho Home Assistant stihl
-   získat. Podržením oznámení zobrazíš snímek ve větším náhledu.
+   získat. Podržením oznámení zobrazíš snímek ve větším náhledu
+   a tlačítko **Položit** pro ukončení hovoru na dálku.
 
 Po aktualizaci dříve importované šablony ji znovu importuj v **Nastavení →
 Automatizace a scény → Šablony** a doplň cestu v existující automatizaci.
@@ -89,6 +90,20 @@ Atribut `detection_delay_seconds` na entitě zazvonění ukazuje rozdíl mezi
 časem zprávy od Tuya a jejím zachycením v Home Assistantu. Atribut
 `notification_prepare_seconds` ukazuje čas od zachycení stisku po přípravu
 běžného oznámení s fotkou. Scrypted dostává stisk hned po zachycení.
+
+## Čekací tón ve zvonku
+
+Pro krátký tón z reproduktoru při čekání přidej v `configuration.yaml`
+do existující sekce `valore_ringbell:` nastavení:
+
+```yaml
+valore_ringbell:
+  waiting_tone: true
+```
+
+Případný řádek `scrypted_camera` ponech ve stejné sekci. Tón se ozve, jakmile
+zvonek naváže spojení, a opakuje se do otevření živého obrazu, položení nebo
+vypršení tříminutové relace.
 
 ## Záznamy zazvonění
 
@@ -157,3 +172,8 @@ přístup k jedné vybrané kameře přes loopback na stejném Home Assistant OS
 3. Nainstaluj oficiální plugin HomeKit v Scrypted a pro toto zařízení ho povol.
    Spáruj jeho samostatný QR kód v Apple Domácnosti. Ověř živý obraz,
    poslech, mikrofon a upozornění při fyzickém zazvonění.
+
+
+Při hovoru z Apple Domácnosti Valore uvolní reproduktor zvonku po krátké pauze
+v řeči, aby se mohl obnovit poslech. Vzhled ovládání živého přenosu určuje
+Apple Domácnost. Červené tlačítko **Položit** nabízí karta a oznámení Home Assistantu.
