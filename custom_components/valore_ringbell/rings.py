@@ -9,7 +9,7 @@ import time
 
 import aiohttp
 
-POLL_INTERVAL = 15
+POLL_INTERVAL = 10
 MAX_BACKOFF = 120
 RATE_LIMIT_BACKOFF = 60
 EVENT_TTL = 180
@@ -96,6 +96,7 @@ async def fetch_rings(mobile, device_id, earliest):
 
 async def watch_rings(fetch, deliver):
     started = int(time.time())
+    clock = asyncio.get_running_loop().time
     pending = deque()
     known = {}
     delay = POLL_INTERVAL
@@ -103,6 +104,7 @@ async def watch_rings(fetch, deliver):
     last_failure = None
     LOG.info("Home Assistant: sledování stisku zvonku každých %s s.", POLL_INTERVAL)
     while True:
+        poll_started = clock()
         cutoff = max(started, int(time.time()) - EVENT_TTL)
         known = {key: stamp for key, stamp in known.items() if stamp >= cutoff}
         try:
@@ -136,4 +138,6 @@ async def watch_rings(fetch, deliver):
                     break
                 LOG.debug("Doorbell event delivered.")
             pending.popleft()
-        await asyncio.sleep(delay)
+        # The wait for a notification photo must not extend the normal polling interval.
+        wait = delay if consecutive_failures else max(1, poll_started + delay - clock())
+        await asyncio.sleep(wait)

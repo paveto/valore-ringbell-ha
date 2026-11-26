@@ -41,6 +41,7 @@ class ValoreDoorbell(EventEntity):
                 "source_timestamp": event["timestamp"],
                 "detection_delay_seconds": max(0, event["detected_at"] - event["timestamp"]),
                 "snapshot_url": event.get("snapshot_url"),
+                "notification_prepare_seconds": event.get("notification_prepare_seconds"),
             },
         )
         self.async_write_ha_state()

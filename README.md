@@ -80,13 +80,15 @@ Pokud máš vlastní zvuk, můžeš ho [importovat do Companion App](https://com
 a do automatizace zadat název souboru. Pokud už máš pro tentýž zvonek
 jinou automatizaci s oznámením, vypni ji, aby iPhone nezazvonil dvakrát.
 
-Integrace kontroluje centrum zpráv Tuya každých 15 sekund při běžném provozu.
+Integrace kontroluje centrum zpráv Tuya každých 10 sekund při běžném provozu.
 Po zachycení stisku rovnou požádá o živý obraz a drží relaci připravenou
 nejvýše tři minuty od zachycení stisku, pokud nikdo hovor nepřijme.
 Příprava obrazu probíhá i bez otevřené nástěnky.
 Při opakovaném výpadku nebo omezení požadavků interval prodlouží.
 Atribut `detection_delay_seconds` na entitě zazvonění ukazuje rozdíl mezi
-časem zprávy od Tuya a jejím zachycením v Home Assistantu.
+časem zprávy od Tuya a jejím zachycením v Home Assistantu. Atribut
+`notification_prepare_seconds` ukazuje čas od zachycení stisku po přípravu
+běžného oznámení s fotkou. Scrypted dostává stisk hned po zachycení.
 
 ## Záznamy zazvonění
 

@@ -1,12 +1,16 @@
-import sdk, {
+import type {
     BinarySensor, Camera, FFmpegInput, Intercom, MediaObject,
-    ResponseMediaStreamOptions, ScryptedDeviceBase, ScryptedInterface,
-    ScryptedMimeTypes, VideoCamera,
+    ResponseMediaStreamOptions, VideoCamera,
 } from '@scrypted/sdk';
 import { spawn, ChildProcessWithoutNullStreams } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { once } from 'node:events';
 
+// Scrypted injects these values into console scripts at runtime.
+declare const sdk: typeof import('@scrypted/sdk').default;
+declare const ScryptedDeviceBase: typeof import('@scrypted/sdk').ScryptedDeviceBase;
+declare const ScryptedInterface: typeof import('@scrypted/sdk').ScryptedInterface;
+declare const ScryptedMimeTypes: typeof import('@scrypted/sdk').ScryptedMimeTypes;
 declare const device: { handleTypes(...interfaces: string[]): void };
 device.handleTypes(ScryptedInterface.BinarySensor);
 
@@ -70,7 +74,10 @@ export default class ValoreDoorbell extends ScryptedDeviceBase implements Camera
             let socket: WebSocket | undefined;
             try {
                 socket = await openSocket('rings');
-                socket.addEventListener('open', () => { backoff = 1000; }, { once: true });
+                socket.addEventListener('open', () => {
+                    backoff = 1000;
+                    this.console.info('Valore: připojeno k místnímu mostu.');
+                }, { once: true });
                 socket.addEventListener('message', ({ data }) => {
                     if (JSON.parse(String(data)).event !== 'ring') return;
                     this.binaryState = true;

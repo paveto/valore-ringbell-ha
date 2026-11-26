@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import logging
 from pathlib import Path
 import ssl
+import time
 
 import aiohttp
 import voluptuous as vol
@@ -154,7 +155,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ValoreEntry) -> bool:
         video.prepare_for_ring()
         await media.notify_ring()
         image = await archive.capture(event)
-        async_dispatcher_send(hass, ring_signal(entry), event | {"snapshot_url": image})
+        async_dispatcher_send(hass, ring_signal(entry), event | {
+            "snapshot_url": image,
+            "notification_prepare_seconds": max(0, int(time.time()) - event["detected_at"]),
+        })
 
     async def fetch(earliest):
         try:
